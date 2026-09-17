@@ -1,3 +1,0 @@
-go test fuzz v1
-string("device-metadata")
-[]byte("{\"deviceVersion\":\"0.5.8\"}")

@@ -1,4 +1,0 @@
-go test fuzz v1
-string("\\P")
-string("4\xa0")
-bool(true)
