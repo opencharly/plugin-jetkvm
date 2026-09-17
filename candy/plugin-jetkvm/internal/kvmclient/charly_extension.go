@@ -91,21 +91,6 @@ func (c *Client) Call(ctx context.Context, method string, params map[string]any,
 // relative mouse) and their release guarantees.
 func (c *Client) ControlLease() (*controlLease, error) { return c.Control() }
 
-// IsVideoReady reports whether the device currently has an H.264 signal it can
-// encode. It is the honest pre-flight for a screenshot: a device with no HDMI
-// source reports ready=false, which lets a caller skip with a reason naming the
-// missing signal instead of timing out waiting for a frame that cannot arrive.
-func (c *Client) IsVideoReady(ctx context.Context) (bool, error) {
-	var st struct {
-		Ready bool   `json:"ready"`
-		Error string `json:"error"`
-	}
-	if err := c.Call(ctx, "getVideoState", nil, &st); err != nil {
-		return false, err
-	}
-	return st.Ready, nil
-}
-
 // KeyBufferSize is the number of simultaneous keys in a HID keyboard report —
 // re-exported so the plugin need not import the hidproto subpackage directly.
 const KeyBufferSize = hidproto.HIDKeyBufferSize
