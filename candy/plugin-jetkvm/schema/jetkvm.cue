@@ -143,13 +143,11 @@
 	"status" |
 	"screenshot" |
 	"version" |
-	"metrics" |
 	"diagnostics" |
 	"video-state" |
 	"usb-state" |
 	"atx-state" |
 	"dc-state" |
-	"get-settings" |
 	"virtual-media-state" |
 	"storage-files" |
 	"wol-devices" |

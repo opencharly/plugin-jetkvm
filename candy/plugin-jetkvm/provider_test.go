@@ -154,34 +154,17 @@ func TestInvokeRequiredModifierIsEnforced(t *testing.T) {
 	}
 }
 
-// TestInvokeRawRPCReadOnly verifies the escape hatch dispatches a real device
-// RPC method and returns its JSON result. The fake device implements `ping`
-// (result "pong") and answers `null` for any other method, so `ping` is the
-// round-trip this test pins — it proves the authored rpc_method reaches the
-// device and its result comes back through the verdict, which is the contract.
-func TestInvokeRawRPCReadOnly(t *testing.T) {
-	dev := fakedevice.Start(t, fakedevice.Options{})
-	status, msg := invoke(t,
-		map[string]any{"method": "rpc", "rpc_method": "ping", "host": dev.BaseURL()},
-		map[string]any{"mode": "live"})
-	if status != "pass" {
-		t.Fatalf("rpc ping should pass, got %q (%s)", status, msg)
-	}
-	if !strings.Contains(msg, "pong") {
-		t.Fatalf("rpc result should carry the pong result, got %q", msg)
-	}
-}
-
-// TestInvokeRawRPCPassesParams verifies rpc_params is decoded and forwarded:
-// the fake answers `null` for an unknown method, so a passing verdict proves the
-// call reached the device and its (null) result came back rather than the call
-// being rejected client-side.
+// TestInvokeRawRPCPassesParams verifies rpc_params is decoded and forwarded once
+// allow_control permits the escape hatch: the fake answers `null` for an unknown
+// method, so a passing verdict proves the call reached the device with its params
+// and the result came back, rather than being rejected client-side.
 func TestInvokeRawRPCPassesParams(t *testing.T) {
 	dev := fakedevice.Start(t, fakedevice.Options{})
 	status, msg := invoke(t,
 		map[string]any{
 			"method": "rpc", "rpc_method": "getVideoState",
 			"rpc_params": `{"refresh":true}`, "host": dev.BaseURL(),
+			"allow_control": true,
 		},
 		map[string]any{"mode": "live"})
 	if status != "pass" {
@@ -272,5 +255,56 @@ func TestInsecureOptionIsWired(t *testing.T) {
 		map[string]any{"mode": "live"})
 	if status != "pass" {
 		t.Fatalf("insecure against a plaintext fake must still connect, got %q (%s)", status, msg)
+	}
+}
+
+// TestRawRPCRequiresControl is the regression test for the validator's finding
+// that `rpc` was classified read-only: the raw escape hatch can invoke ANY
+// device method, so leaving it ungated is a documented bypass of the
+// device-safety gate. It must be mutating (gated), not read-only.
+func TestRawRPCRequiresControl(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	status, msg := invoke(t,
+		map[string]any{"method": "rpc", "rpc_method": "ping", "host": dev.BaseURL()},
+		map[string]any{"mode": "live"})
+	if status != "skip" {
+		t.Fatalf("rpc without allow_control must be gated, got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "mutating method on a physical appliance") {
+		t.Fatalf("gate message should name the reason, got %q", msg)
+	}
+}
+
+// TestRawRPCWithControlStillRefusesIrreversible verifies the second half of the
+// fix: even WITH allow_control the escape hatch cannot reach the irreversible
+// reimaging methods, so it is not a way around the never-autonomous rule.
+func TestRawRPCWithControlStillRefusesIrreversible(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	for _, m := range []string{"factoryReset", "tryUpdate", "tryUpdateComponents"} {
+		status, msg := invoke(t,
+			map[string]any{"method": "rpc", "rpc_method": m, "host": dev.BaseURL(), "allow_control": true},
+			map[string]any{"mode": "live"})
+		if status != "fail" {
+			t.Fatalf("rpc %s must be refused even with allow_control, got %q (%s)", m, status, msg)
+		}
+		if !strings.Contains(msg, "irreversibly reimages or wipes") {
+			t.Fatalf("refusal for %s should name the reason, got %q", m, msg)
+		}
+	}
+}
+
+// TestRawRPCWithControlReachesOrdinaryMethod verifies the gate is not so broad
+// that it breaks the escape hatch's purpose: with allow_control a normal device
+// method is reachable.
+func TestRawRPCWithControlReachesOrdinaryMethod(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	status, msg := invoke(t,
+		map[string]any{"method": "rpc", "rpc_method": "ping", "host": dev.BaseURL(), "allow_control": true},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("rpc ping with allow_control should pass, got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "pong") {
+		t.Fatalf("expected the pong result, got %q", msg)
 	}
 }
