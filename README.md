@@ -69,8 +69,13 @@ Mutating (need `allow_control: true`): `key`, `type`, `key-combo`, `macro`,
 `set-jiggler`, `set-extension`, `set-wol-devices`, `set-log-level`,
 `renew-dhcp`.
 
-The authoritative catalog is `#JetkvmMethod` in `schema/jetkvm.cue`; the
-dispatcher is `runMethod` in `catalog.go`. Every method there is listed above.
+The authoritative catalog is `#JetkvmMethod` in `schema/jetkvm.cue`. Every
+method it allows is classified in `methods.go`: the read-only allowlist
+(`readOnlyMethods`), the never-autonomous set (`neverAutonomous`), and
+everything else as mutating. `dispatch` applies that classification BEFORE
+`runMethod` in `catalog.go` routes the method, which is why `factory-reset`
+and `update` appear in the schema catalog and the refusal lists but have no
+`runMethod` case — they can never reach it.
 
 Never autonomous: `factory-reset`, `update`.
 
