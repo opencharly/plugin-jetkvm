@@ -39,9 +39,22 @@ var readOnlyMethods = map[string]bool{
 	"usb-config":      true,
 }
 
-// neverAutonomous lists the methods that refuse even WITH allow_control: an
-// unattended plan must never wipe or irreversibly reimage a physical device.
+// NeverAutonomousMethods lists the methods that refuse even WITH allow_control:
+// an unattended plan must never wipe or irreversibly reimage a physical device.
 // The operator runs these by hand.
+//
+// Exported for the catalog invariant test, which must read the REAL refusal set
+// rather than a second copy of it (R3): the test needs to know which catalogued
+// methods are legitimately undispatched, and a hardcoded copy would keep passing
+// if this set shrank while the schema kept advertising the method.
+func NeverAutonomousMethods() map[string]bool {
+	out := make(map[string]bool, len(neverAutonomous))
+	for k, v := range neverAutonomous {
+		out[k] = v
+	}
+	return out
+}
+
 var neverAutonomous = map[string]bool{
 	"factory-reset": true,
 	"update":        true,
