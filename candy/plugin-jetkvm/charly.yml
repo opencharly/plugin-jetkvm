@@ -44,6 +44,13 @@ plugin-jetkvm:
             primary:
                 jetkvm: method
         plan:
+            - check: the plugin ships its self-contained CUE schema and provider entrypoint (the files the host reads over Describe and host-builds) — a deterministic probe that fails if either is missing
+              id: jetkvm-module-present
+              file:
+                file: candy/plugin-jetkvm/schema/jetkvm.cue
+                exists: true
+              context:
+                - build
             - check: the jetkvm verb dispatches through the provider registry and reports its documented no-device skip — proving the out-of-process plugin was host-built, connected, and ran its verdict path (a step that FAILS if the verb is unregistered or the module will not build/serve)
               id: jetkvm-verb-dispatches
               jetkvm: status
