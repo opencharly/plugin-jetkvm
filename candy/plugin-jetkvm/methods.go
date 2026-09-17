@@ -35,7 +35,8 @@ var readOnlyMethods = map[string]bool{
 	"cloud-state": true, "network-state": true, "network-settings": true,
 	"tailscale-status": true, "update-status": true, "devmode-state": true,
 	"ssh-key": true, "tls-state": true, "extensions": true, "public-ip": true,
-	"check-media-url": true, "rpc": true,
+	"check-media-url": true,
+	"usb-config":      true,
 }
 
 // neverAutonomous lists the methods that refuse even WITH allow_control: an
@@ -44,6 +45,18 @@ var readOnlyMethods = map[string]bool{
 var neverAutonomous = map[string]bool{
 	"factory-reset": true,
 	"update":        true,
+}
+
+// rpcForbiddenMethods are device JSON-RPC method names the raw `rpc` escape
+// hatch MUST NOT reach, whatever allow_control says. `rpc` is deliberately
+// MUTATING (it is not in readOnlyMethods): it can invoke any device method, so
+// gating it is the whole point — otherwise it is a documented bypass of the
+// device-safety gate. These names are the irreversible/reimaging ones, refused
+// for the same reason their typed counterparts are.
+var rpcForbiddenMethods = map[string]bool{
+	"factoryReset":        true,
+	"tryUpdate":           true,
+	"tryUpdateComponents": true,
 }
 
 // methodSafety reports whether a method may act, and why not when it may not.

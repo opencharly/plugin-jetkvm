@@ -683,6 +683,9 @@ func methodSetJSON(ctx context.Context, cl *kvmclient.Client, rpc, settings stri
 // methodRawRPC is the escape hatch: invoke any device JSON-RPC method, so a
 // method this plugin has not typed yet is reachable without a release.
 func methodRawRPC(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInput) (string, error) {
+	if rpcForbiddenMethods[in.RpcMethod] {
+		return "", fmt.Errorf("jetkvm: rpc: %q is refused: it irreversibly reimages or wipes a physical device and is never reachable through the raw escape hatch", in.RpcMethod)
+	}
 	var p map[string]any
 	if strings.TrimSpace(in.RpcParams) != "" {
 		if err := json.Unmarshal([]byte(in.RpcParams), &p); err != nil {

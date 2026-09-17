@@ -59,7 +59,7 @@ Read-only: `status`, `screenshot`, `version`, `video-state`, `usb-state`,
 `macros`, `keyboard-layout`, `timezones`, `cloud-state`, `network-state`,
 `network-settings`, `tailscale-status`, `update-status`, `devmode-state`,
 `ssh-key`, `tls-state`, `extensions`, `public-ip`, `diagnostics`,
-`check-media-url`, `usb-config`, `rpc`.
+`check-media-url`, `usb-config`.
 
 Mutating (need `allow_control: true`): `key`, `type`, `key-combo`, `macro`,
 `click`, `mouse`, `move`, `scroll`, `drag`, `power`, `dc-power`, `reboot`, `wol`,
@@ -67,7 +67,12 @@ Mutating (need `allow_control: true`): `key`, `type`, `key-combo`, `macro`,
 `set-video`, `set-display`, `set-audio`, `set-network`, `set-tailscale`,
 `set-devmode`, `set-ssh-key`, `set-tls`, `set-keyboard-layout`, `set-macros`,
 `set-jiggler`, `set-extension`, `set-wol-devices`, `set-log-level`,
-`renew-dhcp`.
+`renew-dhcp`, `rpc`.
+
+`rpc` is MUTATING, deliberately: it can invoke ANY device JSON-RPC method, so an
+ungated escape hatch would be a bypass of the safety gate. It requires
+`allow_control: true`, and even then refuses the irreversible reimaging methods
+(`factoryReset`, `tryUpdate`, `tryUpdateComponents`).
 
 The authoritative catalog is `#JetkvmMethod` in `schema/jetkvm.cue`. Every
 method it allows is classified in `methods.go`: the read-only allowlist
