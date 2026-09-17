@@ -107,7 +107,7 @@ jetkvm-device-methods:
               id: jk-usb-state
               jetkvm: {method: usb-state, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "configured"
               context: [runtime]
             - check: the ATX power/HDD LED state is reported
               id: jk-atx-state
@@ -119,19 +119,19 @@ jetkvm-device-methods:
               id: jk-dc-state
               jetkvm: {method: dc-state, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "isOn"
               context: [runtime]
             - check: the virtual media state is reported
               id: jk-vm-state
               jetkvm: {method: virtual-media-state, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "null"
               context: [runtime]
             - check: the device storage listing is reported
               id: jk-storage
               jetkvm: {method: storage-files, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "files"
               context: [runtime]
             - check: the keyboard layout is reported
               id: jk-layout
@@ -143,19 +143,19 @@ jetkvm-device-methods:
               id: jk-net-state
               jetkvm: {method: network-state, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "dhcp_lease"
               context: [runtime]
             - check: the network settings are reported
               id: jk-net-settings
               jetkvm: {method: network-settings, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "dhcp_client"
               context: [runtime]
             - check: the tailscale status is reported
               id: jk-tailscale
               jetkvm: {method: tailscale-status, host: jk.armadillo-quail.ts.net}
               stdout:
-                  - contains: ""
+                  - contains: "backendState"
               context: [runtime]
             - check: the available extensions and the active one are reported
               id: jk-extensions
