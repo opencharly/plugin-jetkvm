@@ -1,0 +1,47 @@
+# golangci-lint config for the plugin-jetkvm module.
+#
+# Mirrors charly's root candy config (`default: standard` + gofmt), with ONE
+# addition this repository genuinely needs: the vendored third-party client
+# under internal/kvmclient is EXCLUDED from lint findings.
+#
+# Why an exclusion rather than edits: that code is copied from MIT/BSD-licensed
+# upstream projects (see third_party/NOTICE) that did not run this project's
+# linter. Rewriting it to satisfy our linter would (a) diverge the vendored copy
+# from its upstream provenance, making a future re-vendor a merge instead of a
+# copy, and (b) review third-party style as if it were our code. The exclusion is
+# scoped to the vendored PATHS, so every file this project authors is held to
+# the full standard set.
+#
+# SCOPE, precisely: the excluded paths are the vendored upstream PRODUCTION
+# client only. Upstream's own test suite is NOT vendored (it is upstream's
+# coverage of upstream's code, not this change's obligation), so the only tests
+# under internal/ are this project's own — the fake device is a vendored
+# upstream test FIXTURE (in-process device), which is excluded because it is
+# third-party code, while provider_test.go is first-party and fully linted.
+version: "2"
+
+run:
+  timeout: 10m
+
+linters:
+  default: standard
+  settings:
+    errcheck:
+      # The SAME exclusions charly's root config carries: a deferred best-effort
+      # Close on a response body or handle is the idiomatic form.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+  exclusions:
+    paths:
+      # Vendored upstream production client (third_party/NOTICE). Upstream's
+      # own tests are not vendored.
+      - internal/kvmclient
+      # Vendored upstream in-process fake-device fixture (third_party/NOTICE).
+      - internal/fakedevice
+
+formatters:
+  enable:
+    - gofmt

@@ -1,0 +1,126 @@
+# Third-party code reuse in plugin-jetkvm
+
+This repository's plugin is MIT-licensed (see `/LICENSE`). Its device client
+under `candy/plugin-jetkvm/internal/kvmclient` is VENDORED — copied and adapted —
+from two MIT/BSD-licensed reference implementations of the JetKVM local
+control-plane protocol, because neither is importable as a Go module (both keep
+their client under a Go `internal/` path, which Go forbids importing across
+module boundaries) and the upstream firmware `github.com/jetkvm/kvm` is
+GPL-2.0 and therefore cannot be linked into this MIT plugin.
+
+The wire format itself (JSON-RPC method names, the `hidrpc` message-type bytes,
+the data-channel labels) is an interface, reimplemented from the public
+firmware source; the vendored code is the higher-level client/handshake logic.
+
+## Vendored trees
+
+| Path | Origin | License | Nature |
+|---|---|---|---|
+| `candy/plugin-jetkvm/internal/kvmclient/` | LeeroyDing/jetkvm-mcp (MIT) | MIT | vendored PRODUCTION client (package renamed `jetkvm` → `kvmclient`) |
+| `candy/plugin-jetkvm/internal/kvmclient/hidproto/` | LeeroyDing/jetkvm-mcp (MIT) | MIT | vendored HID wire codec |
+| `candy/plugin-jetkvm/internal/fakedevice/` | LeeroyDing/jetkvm-mcp (MIT) | MIT | vendored in-process fake JetKVM device, used only by this project's tests |
+| `conallob/mcp-jetkvm` (BSD-3) | reference only | BSD-3 | virtual-media / USB method shapes re-derived, no file copied |
+
+Upstream's own TEST SUITE is deliberately NOT vendored: it is upstream's
+coverage of upstream's code, not this change's coverage obligation. The coverage
+this repository ships is its own (`candy/plugin-jetkvm/provider_test.go`, driving
+the real `plugin_input` → `Invoke` path against the vendored fake device, plus
+the live R10 bed in the root `charly.yml`).
+
+The ONLY local modifications to vendored files are: the package rename, the
+module import-path rewrite, and one added file
+(`internal/kvmclient/charly_extension.go`) holding this project's additions
+(`Call`, `ControlLease`, `NormalizeDeviceURL`, `applyInsecureTLS`, and the drag
+wrapper). No vendored file bodies were otherwise edited, so a future re-vendor
+against a newer upstream revision remains a copy rather than a merge.
+
+---
+
+## LeeroyDing/jetkvm-mcp — MIT
+
+Copyright (c) 2026 Leeroy Ding
+Source: https://github.com/LeeroyDing/jetkvm-mcp
+
+Files adapted (renamed package `jetkvm` -> `kvmclient`, module import paths
+repointed; unmodified otherwise):
+
+    internal/jetkvm/client.go
+    internal/jetkvm/compat.go
+    internal/jetkvm/control_validation.go
+    internal/jetkvm/decoder.go
+    internal/jetkvm/diagnostics.go
+    internal/jetkvm/errors.go
+    internal/jetkvm/h264.go
+    internal/jetkvm/hid.go
+    internal/jetkvm/http.go
+    internal/jetkvm/keycombo.go
+    internal/jetkvm/mouse_button.go
+    internal/jetkvm/owner.go
+    internal/jetkvm/pointer_drag.go
+    internal/jetkvm/redact.go
+    internal/jetkvm/rpc.go
+    internal/jetkvm/session.go
+    internal/jetkvm/signaling.go
+    internal/jetkvm/type_string.go
+    internal/jetkvm/url.go
+    internal/jetkvm/video.go
+    internal/hidproto/hidproto.go
+    internal/testdata/fakedevice/fakedevice.go   (-> internal/fakedevice/)
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## conallob/mcp-jetkvm — BSD 3-Clause
+
+Copyright (c) 2026, Conall O'Brien
+Source: https://github.com/conallob/mcp-jetkvm
+
+Used as a REFERENCE for the virtual-media and USB-gadget JSON-RPC method
+shapes. No file is copied verbatim; the method-name and parameter-shape facts
+were re-derived and expressed in this plugin's own `catalog.go`.
+
+BSD 3-Clause License
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
