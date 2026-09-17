@@ -143,13 +143,11 @@
 	"status" |
 	"screenshot" |
 	"version" |
-	"metrics" |
 	"diagnostics" |
 	"video-state" |
 	"usb-state" |
 	"atx-state" |
 	"dc-state" |
-	"get-settings" |
 	"virtual-media-state" |
 	"storage-files" |
 	"wol-devices" |
@@ -206,10 +204,9 @@
 	"set-log-level" |
 	"renew-dhcp" |
 	"factory-reset" |
-	// lifecycle
+	// lifecycle (never autonomous — refused before dispatch)
 	"update" |
-	"session" |
-	// raw escape hatch
+	// raw escape hatch (mutating: it can reach any device method)
 	"rpc"
 
 // #JetkvmMacroStep — one step of a keyboard macro.
