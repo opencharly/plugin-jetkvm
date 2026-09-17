@@ -1,0 +1,295 @@
+package kvmclient
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+)
+
+// DefaultControlLeaseTimeout bounds how long a caller may hold the control
+// lease without releasing it. A caller that simply stops calling us (crash,
+// hang, forgotten Release) therefore triggers a bounded neutralization attempt;
+// failure remains explicit because no client can guarantee attached-host state.
+const DefaultControlLeaseTimeout = 30 * time.Second
+
+// neutralizeTimeout bounds the release-all that ends every lease. It is
+// deliberately independent of the holder's context, which is usually
+// already dead by the time a lease ends.
+const neutralizeTimeout = 2 * time.Second
+
+// controlLease is the single point through which keyboard/mouse commands
+// flow for a Client. What it actually guarantees, and what the tests in
+// owner_test.go and hid_test.go prove:
+//
+//   - Exclusivity: at most one holder at a time. Acquire waits (bounded by
+//     its context); TryAcquire reports ErrControlHeld for an occupied slot or
+//     ErrControlLifecycleBusy for an in-progress release instead of queuing.
+//   - Generation validation: every holder gets a fresh, never-reused token
+//     from the HID state machine, and every frame is re-validated against
+//     the currently-active token at the last moment before it is written.
+//     A frame authorized by an ended lease is dropped, not delivered late.
+//   - Terminal neutralization: however the lease ends - explicit Release,
+//     context cancellation, inactivity timeout, disconnect, or Client
+//     shutdown - the generation is revoked first. Neutral reports pre-empt
+//     the application queue and follow any bytes Pion already accepted on
+//     the ordered channel.
+//   - Bounded, truthful transport semantics: Pion buffering is capped before
+//     Send, and release success waits for its outbound amount to reach zero.
+//     Otherwise ErrNeutralizeUnverified is returned and held state is kept.
+//
+// It is created disabled (hid == nil) unless the Client was connected with
+// AllowControl: true, so a caller that never opted into control cannot
+// construct a working lease at all.
+//
+// Lock ordering: the lease's slot semaphore is acquired before
+// hidClient.stateMu, never the other way around. The semaphore is a
+// channel rather than a mutex specifically so acquisition can respect a
+// context without leaking a goroutine per waiter.
+type controlLease struct {
+	hid  *hidClient
+	slot chan struct{}
+}
+
+func newControlLease(hid *hidClient) *controlLease {
+	return &controlLease{hid: hid, slot: make(chan struct{}, 1)}
+}
+
+// ErrControlHeld is returned by TryAcquire when another caller already
+// holds the lease slot.
+var ErrControlHeld = errors.New("jetkvm: control lease is already held")
+
+// ErrControlLifecycleBusy is returned by TryAcquire when a release or close
+// neutralization transaction owns the HID lifecycle gate. Unlike Acquire,
+// TryAcquire never waits for that transaction to finish.
+var ErrControlLifecycleBusy = errors.New("jetkvm: control lifecycle transition is in progress")
+
+// ErrControlDisabled is returned when control was never enabled for this
+// connection, so no lease can exist.
+var ErrControlDisabled = errors.New("jetkvm: control is not enabled for this connection")
+
+// Held is a live handle on an acquired control lease. Every method is
+// bounded by the caller's context, and every method after the lease ends
+// returns an error rather than silently no-op'ing.
+type Held struct {
+	lease  *controlLease
+	token  uint64
+	cancel context.CancelFunc
+	done   chan struct{}
+	once   sync.Once
+	err    error
+}
+
+// Acquire blocks until the lease is free (or ctx is done), then holds it
+// with a watchdog: the lease is force-released, with neutralization, if
+// ctx is canceled, if timeout elapses without a Release, or if Release is
+// called explicitly. Pass timeout <= 0 for DefaultControlLeaseTimeout.
+//
+// Acquire fails if the HID readiness handshake has not been confirmed by
+// the device, so a lease can never exist over a channel the device is not
+// actually honoring.
+func (l *controlLease) Acquire(ctx context.Context, timeout time.Duration) (*Held, error) {
+	if l == nil || l.hid == nil {
+		return nil, ErrControlDisabled
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("jetkvm: waiting for the control lease: %w", err)
+	}
+	select {
+	case l.slot <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("jetkvm: waiting for the control lease: %w", ctx.Err())
+	}
+	return l.hold(ctx, ctx, timeout)
+}
+
+// AcquirePersistent acquires the lease with ctx, but gives the resulting
+// holder an independent lifetime bounded by timeout. It exists for explicit
+// press/release operations whose state must survive the request that performed
+// the press. Callers must retain the Held and eventually call Release; the
+// watchdog still force-releases it after timeout if they do not.
+func (l *controlLease) AcquirePersistent(ctx context.Context, timeout time.Duration) (*Held, error) {
+	if l == nil || l.hid == nil {
+		return nil, ErrControlDisabled
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("jetkvm: waiting for the control lease: %w", err)
+	}
+	select {
+	case l.slot <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("jetkvm: waiting for the control lease: %w", ctx.Err())
+	}
+	return l.hold(ctx, context.Background(), timeout)
+}
+
+// TryAcquire is Acquire's non-blocking sibling. It returns ErrControlHeld when
+// the lease slot is occupied and ErrControlLifecycleBusy when release or close
+// owns the lifecycle gate. Used by adapters (MCP tools) that would rather
+// report "busy" than queue.
+func (l *controlLease) TryAcquire(ctx context.Context, timeout time.Duration) (*Held, error) {
+	if l == nil || l.hid == nil {
+		return nil, ErrControlDisabled
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("jetkvm: acquiring the control lease: %w", err)
+	}
+	select {
+	case l.slot <- struct{}{}:
+	default:
+		return nil, ErrControlHeld
+	}
+	return l.tryHold(ctx, ctx, timeout)
+}
+
+// TryAcquirePersistent is the non-blocking form of AcquirePersistent. The
+// caller context bounds acquisition and readiness, but cannot end the returned
+// holder while its operation is still leaving a send path. It returns the same
+// explicit contention errors as TryAcquire and never waits on the lifecycle.
+func (l *controlLease) TryAcquirePersistent(ctx context.Context, timeout time.Duration) (*Held, error) {
+	if l == nil || l.hid == nil {
+		return nil, ErrControlDisabled
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("jetkvm: acquiring the persistent control lease: %w", err)
+	}
+	select {
+	case l.slot <- struct{}{}:
+	default:
+		return nil, ErrControlHeld
+	}
+	return l.tryHold(ctx, context.Background(), timeout)
+}
+
+// hold completes an acquisition that already owns the exclusivity slot.
+func (l *controlLease) hold(acquireCtx, lifetimeCtx context.Context, timeout time.Duration) (*Held, error) {
+	token, err := l.hid.beginLease(acquireCtx)
+	return l.startHeld(token, err, lifetimeCtx, timeout)
+}
+
+// tryHold completes a non-blocking acquisition that already owns the slot.
+func (l *controlLease) tryHold(acquireCtx, lifetimeCtx context.Context, timeout time.Duration) (*Held, error) {
+	token, err := l.hid.tryBeginLease(acquireCtx)
+	return l.startHeld(token, err, lifetimeCtx, timeout)
+}
+
+func (l *controlLease) startHeld(token uint64, err error, lifetimeCtx context.Context, timeout time.Duration) (*Held, error) {
+	if err != nil {
+		<-l.slot
+		return nil, err
+	}
+	if timeout <= 0 {
+		timeout = DefaultControlLeaseTimeout
+	}
+
+	watchdogCtx, cancel := context.WithTimeout(lifetimeCtx, timeout)
+	h := &Held{lease: l, token: token, cancel: cancel, done: make(chan struct{})}
+	go h.watch(watchdogCtx)
+	return h, nil
+}
+
+// watch force-releases the lease as soon as the watchdog context ends,
+// unless Release already did so. Exactly one watchdog goroutine exists per
+// acquisition, and exclusivity bounds that to one at a time.
+func (h *Held) watch(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		_ = h.Release()
+	case <-h.done:
+	}
+}
+
+// Release ends the lease: it revokes the lease generation, writes the
+// neutralization frames, and frees the exclusivity slot for recovery. Safe to
+// call more than once and concurrently with the watchdog firing; the first
+// call's result is returned to all callers.
+//
+// A non-nil error means neutralization could not be confirmed (see
+// ErrNeutralizeUnverified). The slot is freed either way so teardown can retry
+// cleanup, but a fresh generation remains prohibited until neutralization is
+// independently confirmed.
+func (h *Held) Release() error {
+	h.once.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), neutralizeTimeout)
+		h.err = h.lease.hid.releaseAll(ctx)
+		cancel()
+
+		h.cancel()
+		<-h.lease.slot
+		close(h.done)
+	})
+	return h.err
+}
+
+// Token returns the lease generation this holder sends under. Frames are
+// validated against it at the last moment before they are written.
+func (h *Held) Token() uint64 { return h.token }
+
+// Done is closed after this holder has released (explicitly or through its
+// context/watchdog). Session adapters that retain a holder across requests use
+// it to discard stale held-input bookkeeping promptly.
+func (h *Held) Done() <-chan struct{} { return h.done }
+
+// checkAlive is an early-out for callers, not the authoritative check. The
+// authoritative check is the token validation performed inside the HID
+// writer immediately before the frame is written, which is what closes the
+// race between an in-flight send and a concurrent release.
+func (h *Held) checkAlive() error {
+	select {
+	case <-h.done:
+		return fmt.Errorf("jetkvm: control lease already released: %w", ErrStaleControlToken)
+	default:
+		return nil
+	}
+}
+
+// SendKeyboardReport sends a full keyboard state report through the held
+// lease, bounded by ctx. See internal/hidproto for wire format details.
+func (h *Held) SendKeyboardReport(ctx context.Context, modifier byte, keys []byte) error {
+	if err := h.checkAlive(); err != nil {
+		return err
+	}
+	return h.lease.hid.sendKeyboardReport(ctx, h.token, modifier, keys)
+}
+
+// ReleaseKeyboard clears every key and modifier without changing the current
+// mouse-button state. A nil result means the zero keyboard report, and every
+// report ordered before it, drained from Pion's outbound SCTP buffer. On error,
+// callers must assume keyboard state may remain held. This is used when a
+// persistent mouse-button holder must remain live after a one-shot operation.
+func (h *Held) ReleaseKeyboard(ctx context.Context) error {
+	if err := h.checkAlive(); err != nil {
+		return err
+	}
+	return h.lease.hid.releaseKeyboard(ctx, h.token)
+}
+
+// SendPointerReport sends an absolute-mouse report through the held lease,
+// bounded by ctx.
+func (h *Held) SendPointerReport(ctx context.Context, x, y int32, buttons byte) error {
+	if err := h.checkAlive(); err != nil {
+		return err
+	}
+	return h.lease.hid.sendPointerReport(ctx, h.token, x, y, buttons)
+}
+
+// SendMouseReport sends a relative-mouse report through the held lease,
+// bounded by ctx.
+func (h *Held) SendMouseReport(ctx context.Context, dx, dy int8, buttons byte) error {
+	if err := h.checkAlive(); err != nil {
+		return err
+	}
+	return h.lease.hid.sendMouseReport(ctx, h.token, dx, dy, buttons)
+}
+
+// neutralize performs Client.Close's release-all outside of any lease and
+// makes the HID state terminal before allowing another lease creation to
+// proceed. The lease may or may not be held; redundant neutralization is
+// harmless but input ordered after it would not be.
+func (l *controlLease) neutralize(ctx context.Context) error {
+	if l == nil || l.hid == nil {
+		return nil
+	}
+	return l.hid.releaseAllAndClose(ctx, errSessionClosed)
+}

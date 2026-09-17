@@ -1,0 +1,14 @@
+# Build output
+bin/
+# charly run artifacts
+.check/
+
+# Go workspace files — this is a STANDALONE module (charly's loader builds it
+# with GOWORK=off), so a workspace file here would only mask module resolution.
+go.work
+go.work.sum
+
+# charly-generated build context ignores + build output
+.containerignore
+.dockerignore
+.build/

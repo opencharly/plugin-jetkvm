@@ -1,0 +1,77 @@
+# Makes this plugin repo a PROJECT so its own candy is actually gated.
+#
+# Without a root charly.yml the repo is "project-less": charly scans NO candies
+# at all, so `charly box validate` at the repo root exits 0 on ANY manifest,
+# including one with a malformed `plugin.providers` entry. Declaring discover:
+# is the whole fix: the candy is scanned, the CUE schema gate applies, and the
+# stock `charly box validate` step starts working with no workflow change.
+version: 2026.249.2125
+discover:
+    - path: candy
+      recursive: true
+
+# A disposable LOCAL bed proving the plugin's verb is registered and its verdict
+# path runs end to end through the real provider registry. `disposable: true` is
+# the sole authorization for autonomous teardown, and this bed touches nothing
+# but the registry: the verb reports the documented live-device skip because no
+# JetKVM address is authored. Kept `host: local` so the bed runs anywhere.
+#
+# The plan lives on the DEPLOY node, not the template: a composed template's
+# `plan:` is never surfaced to a deploy-scope check runner for a non-image
+# deploy, so a check authored only on the template passes asserting nothing.
+jetkvm-verb-probe:
+    local:
+        from: jetkvm-probe-host
+        host: local
+        disposable: true
+        plan:
+            - check: the jetkvm verb dispatches through the provider registry and reports its documented no-device skip (proving the out-of-process plugin connected and its verdict path ran)
+              id: jetkvm-dispatch-probe
+              jetkvm: status
+              stdout:
+                - contains: skip
+              context:
+                - runtime
+jetkvm-probe-host:
+    local:
+        description: minimal kind:local template for the jetkvm verb-dispatch bed
+        candy: []
+
+# The REAL-DEVICE bed, read-only. The device address is not secret; the session
+# token is supplied at run time via JETKVM_AUTH_TOKEN (or the credential store)
+# and is NEVER committed. Read-only methods need no allow_control, so this bed
+# can never actuate the appliance.
+jetkvm-device-readonly:
+    local:
+        from: jetkvm-device-host
+        host: local
+        disposable: true
+        plan:
+            - check: the JetKVM is reachable and its control channel answers (device identity + firmware over the live WebRTC/JSON-RPC wire)
+              id: jetkvm-device-status
+              jetkvm:
+                  method: status
+                  host: jk.armadillo-quail.ts.net
+              stdout:
+                  - contains: "jetkvm:    ok"
+                  - contains: "rpc:       true"
+              context:
+                  - runtime
+              eventually: 60s
+              retry_interval: 5s
+            - check: a fresh 1080p framebuffer is captured from the live device and written as a real PNG (artifact-reality asserted, not just "the call returned")
+              id: jetkvm-device-screenshot
+              jetkvm:
+                  method: screenshot
+                  host: jk.armadillo-quail.ts.net
+                  artifact: /tmp/jetkvm-bed-shot.png
+                  artifact_min_bytes: 20000
+                  artifact_min_dimensions: 640x480
+              context:
+                  - runtime
+              eventually: 60s
+              retry_interval: 5s
+jetkvm-device-host:
+    local:
+        description: minimal kind:local template for the real-device read-only bed
+        candy: []

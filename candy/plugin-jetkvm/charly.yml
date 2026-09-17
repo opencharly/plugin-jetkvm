@@ -1,0 +1,58 @@
+version: 2026.258.0220
+plugin-jetkvm:
+    candy:
+        version: 2026.258.1200
+        description: |-
+            OUT-OF-TREE charly plugin serving the `jetkvm` IP-KVM verb — a standalone
+            Go module (go.mod + cmd/serve) that drives a JetKVM device
+            (https://jetkvm.com) without a browser, over JetKVM's own WebRTC
+            control plane: local login (POST /auth/login-local) -> signaling
+            websocket (/webrtc/signaling/client) -> the "rpc" JSON-RPC 2.0 data
+            channel, the binary "hidrpc" input channel, and the H.264 video track
+            decoded to a PNG by ffmpeg. It is served OUT-OF-PROCESS over go-plugin
+            gRPC via the charly plugin SDK (github.com/opencharly/sdk); charly's
+            loader fetches this candy's repo, go-builds the provider binary on the
+            HOST, and connects it via LocalTransport, so the device wire lives
+            HERE, out of charly's core check surface.
+
+            READ-ONLY BY DEFAULT. The device is a physical appliance and is NOT
+            disposable, so every mutating method (keyboard/pointer input, power and
+            ATX/DC control, virtual media, USB gadget, config writes, reboot,
+            firmware update, factory reset) requires the explicit
+            `allow_control: true` input; without it a mutating method reports a
+            skip naming the gate rather than acting. `factory-reset` additionally
+            requires it and is never exerciseable from a bed.
+
+            The verb's entire authoring surface lives in this plugin's own
+            #JetkvmInput (schema/jetkvm.cue), which the host splices onto the base
+            and validates every authored `jetkvm:` step against; the plugin
+            self-evaluates the shared stdout/stderr/exit_status matchers and the
+            artifact validators (sdk.VerbVerdict / sdk.RunArtifactValidators), so it
+            owns the verdict exactly like every other out-of-process verb.
+
+            Client reuse, not reinvention: the WebRTC/HID wire is vendored from
+            LeeroyDing/jetkvm-mcp (MIT) and conallob/mcp-jetkvm (BSD-3) under
+            internal/kvmclient (see third_party/NOTICE) and rides the SAME
+            github.com/pion/webrtc/v4 stack the JetKVM firmware itself uses. The
+            session/artifact/credential plumbing is charly's own
+            (sdk.VerbVerdict, sdk.LandArtifact, sdk.RequireModifiers), never a
+            second implementation.
+        plugin:
+            source: github.com/opencharly/plugin-jetkvm/candy/plugin-jetkvm
+            providers:
+                - verb:jetkvm
+            primary:
+                jetkvm: method
+        plan:
+            - check: the jetkvm plugin ships a buildable Go module (go.mod + the provider main) the host can build and serve out-of-process, and the served #JetkvmInput schema splices onto the base so an authored `jetkvm:` step validates at load
+              id: jetkvm-module-present
+              context:
+                - build
+              command: "true"
+            - check: the jetkvm verb dispatches through the provider registry and, in box mode (no live device), reports the documented live-deployment skip instead of failing — proving the verb is registered and its verdict path runs
+              id: jetkvm-verb-dispatches
+              jetkvm: status
+              stdout:
+                - contains: skip
+              context:
+                - build
