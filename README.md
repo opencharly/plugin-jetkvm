@@ -59,11 +59,18 @@ Read-only: `status`, `screenshot`, `version`, `video-state`, `usb-state`,
 `macros`, `keyboard-layout`, `timezones`, `cloud-state`, `network-state`,
 `network-settings`, `tailscale-status`, `update-status`, `devmode-state`,
 `ssh-key`, `tls-state`, `extensions`, `public-ip`, `diagnostics`,
-`check-media-url`, `rpc`.
+`check-media-url`, `usb-config`, `rpc`.
 
 Mutating (need `allow_control: true`): `key`, `type`, `key-combo`, `macro`,
 `click`, `mouse`, `move`, `scroll`, `drag`, `power`, `dc-power`, `reboot`, `wol`,
-`virtual-media`, `usb-device`, `usb-emulation`, `set-*`, `renew-dhcp`.
+`virtual-media`, `usb-device`, `usb-emulation`, `set-settings`, `set-edid`,
+`set-video`, `set-display`, `set-audio`, `set-network`, `set-tailscale`,
+`set-devmode`, `set-ssh-key`, `set-tls`, `set-keyboard-layout`, `set-macros`,
+`set-jiggler`, `set-extension`, `set-wol-devices`, `set-log-level`,
+`renew-dhcp`.
+
+The authoritative catalog is `#JetkvmMethod` in `schema/jetkvm.cue`; the
+dispatcher is `runMethod` in `catalog.go`. Every method there is listed above.
 
 Never autonomous: `factory-reset`, `update`.
 

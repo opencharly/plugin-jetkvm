@@ -11,6 +11,13 @@
 # copy, and (b) review third-party style as if it were our code. The exclusion is
 # scoped to the vendored PATHS, so every file this project authors is held to
 # the full standard set.
+#
+# SCOPE, precisely: the excluded paths are the vendored upstream PRODUCTION
+# client only. Upstream's own test suite is NOT vendored (it is upstream's
+# coverage of upstream's code, not this change's obligation), so the only tests
+# under internal/ are this project's own — the fake device is a vendored
+# upstream test FIXTURE (in-process device), which is excluded because it is
+# third-party code, while provider_test.go is first-party and fully linted.
 version: "2"
 
 run:
@@ -29,9 +36,10 @@ linters:
         - (io.Closer).Close
   exclusions:
     paths:
-      # Vendored upstream client + its vendored test suite (third_party/NOTICE).
+      # Vendored upstream production client (third_party/NOTICE). Upstream's
+      # own tests are not vendored.
       - internal/kvmclient
-      # Vendored upstream fake-device test fixture (third_party/NOTICE).
+      # Vendored upstream in-process fake-device fixture (third_party/NOTICE).
       - internal/fakedevice
 
 formatters:

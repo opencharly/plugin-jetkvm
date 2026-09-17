@@ -44,15 +44,10 @@ plugin-jetkvm:
             primary:
                 jetkvm: method
         plan:
-            - check: the jetkvm plugin ships a buildable Go module (go.mod + the provider main) the host can build and serve out-of-process, and the served #JetkvmInput schema splices onto the base so an authored `jetkvm:` step validates at load
-              id: jetkvm-module-present
-              context:
-                - build
-              command: "true"
-            - check: the jetkvm verb dispatches through the provider registry and, in box mode (no live device), reports the documented live-deployment skip instead of failing — proving the verb is registered and its verdict path runs
+            - check: the jetkvm verb dispatches through the provider registry and reports its documented no-device skip — proving the out-of-process plugin was host-built, connected, and ran its verdict path (a step that FAILS if the verb is unregistered or the module will not build/serve)
               id: jetkvm-verb-dispatches
               jetkvm: status
               stdout:
                 - contains: skip
               context:
-                - build
+                - runtime

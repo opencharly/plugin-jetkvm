@@ -42,8 +42,6 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 		return callSummary(ctx, cl, "getATXState", nil)
 	case "dc-state":
 		return callSummary(ctx, cl, "getDCPowerState", nil)
-	case "get-settings":
-		return methodGetSettings(ctx, cl, in)
 	case "virtual-media-state":
 		return callSummary(ctx, cl, "getVirtualMediaState", nil)
 	case "storage-files":
@@ -78,8 +76,6 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 		return methodPublicIP(ctx, cl)
 	case "diagnostics":
 		return methodDiagnostics(ctx, cl)
-	case "metrics":
-		return methodMetrics(ctx, cl)
 	case "check-media-url":
 		return methodCheckMediaURL(ctx, cl, in)
 
@@ -213,13 +209,6 @@ func methodScreenshot(ctx context.Context, cl *kvmclient.Client, in *params.Jetk
 	return fmt.Sprintf("Screenshot saved to %s (%dx%d)", in.Artifact, shot.Width, shot.Height), nil
 }
 
-// methodGetSettings returns the whole device config JSON.
-func methodGetSettings(_ context.Context, _ *kvmclient.Client, _ *params.JetkvmInput) (string, error) {
-	// The full config is exposed over the local HTTP API, not JSON-RPC; the
-	// plugin reports the RPC-visible subset rather than inventing an endpoint.
-	return "", fmt.Errorf("jetkvm: get-settings: use the device's local /device API or `rpc` for a specific getter; the full config is not a JSON-RPC method")
-}
-
 // methodExtensions lists the device's supported extension ids.
 func methodExtensions(ctx context.Context, cl *kvmclient.Client) (string, error) {
 	active, err := callSummary(ctx, cl, "getActiveExtension", nil)
@@ -252,12 +241,6 @@ func methodDiagnostics(ctx context.Context, cl *kvmclient.Client) (string, error
 		fmt.Fprintf(&b, "%s: %s\n", m, js)
 	}
 	return b.String(), nil
-}
-
-// methodMetrics surfaces the device's own Prometheus counters for the few
-// signals a check can assert on without scraping /metrics.
-func methodMetrics(ctx context.Context, cl *kvmclient.Client) (string, error) {
-	return callSummary(ctx, cl, "getDeviceID", nil)
 }
 
 // methodCheckMediaURL asks the device whether it can mount a remote image
@@ -414,7 +397,7 @@ func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmI
 	}
 	defer func() { _ = held.Release() }()
 
-	button, pressed, err := kvmclient.ResolveMouseButton(in.Button, "press")
+	button, _, err := kvmclient.ResolveMouseButton(in.Button, "press")
 	if err != nil {
 		return "", err
 	}
@@ -428,8 +411,11 @@ func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmI
 		if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
 			return "", err
 		}
-		_ = pressed
-		return fmt.Sprintf("Clicked button at (%d, %d)", in.X, in.Y), nil
+		label := in.Button
+		if label == "" {
+			label = "left"
+		}
+		return fmt.Sprintf("Clicked %s at (%d, %d)", label, in.X, in.Y), nil
 	}
 	return fmt.Sprintf("Moved pointer to (%d, %d)", in.X, in.Y), nil
 }
@@ -465,27 +451,26 @@ func methodDrag(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInpu
 	if err != nil {
 		return "", err
 	}
-	// Bounded interpolation so the target OS sees a real drag, reusing the
-	// vendored step limit rather than an ad-hoc loop count.
-	steps := 24
+	// Build the gesture with the vendored builder and validate it with the
+	// vendored validator, so the interpolation count, the coordinate bounds and
+	// the "must include a pressed state" rule are the client's (R3), not a
+	// second hand-rolled loop with its own magic count.
+	reports, err := kvmclient.BuildPointerDrag(kvmclient.DragOptions{
+		FromX: in.FromX, FromY: in.FromY, ToX: in.X, ToY: in.Y, Buttons: int(button),
+	})
+	if err != nil {
+		return "", err
+	}
 	released := false
 	defer func() {
 		if !released {
 			_ = held.SendPointerReport(context.Background(), int32(in.X), int32(in.Y), 0)
 		}
 	}()
-	if err := held.SendPointerReport(ctx, int32(in.FromX), int32(in.FromY), button); err != nil {
-		return "", err
-	}
-	for i := 1; i <= steps; i++ {
-		x := in.FromX + (in.X-in.FromX)*i/steps
-		y := in.FromY + (in.Y-in.FromY)*i/steps
-		if err := held.SendPointerReport(ctx, int32(x), int32(y), button); err != nil {
+	for _, r := range reports {
+		if err := held.SendPointerReport(ctx, int32(r.X), int32(r.Y), byte(r.Buttons)); err != nil {
 			return "", err
 		}
-	}
-	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
-		return "", err
 	}
 	released = true
 	return fmt.Sprintf("Dragged from (%d, %d) to (%d, %d)", in.FromX, in.FromY, in.X, in.Y), nil

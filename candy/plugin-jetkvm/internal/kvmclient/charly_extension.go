@@ -95,6 +95,34 @@ func (c *Client) ControlLease() (*controlLease, error) { return c.Control() }
 // re-exported so the plugin need not import the hidproto subpackage directly.
 const KeyBufferSize = hidproto.HIDKeyBufferSize
 
+// DefaultDragSteps is the number of interpolated intermediate pointer reports a
+// drag gesture emits between its endpoints. It is a NAMED choice, not a magic
+// count buried in a loop: enough that the target OS sees real movement rather
+// than a teleport, while staying far below the client's MaxDragSteps bound.
+const DefaultDragSteps = 24
+
+// DragOptions describes one absolute-pointer drag gesture.
+type DragOptions struct {
+	FromX, FromY int
+	ToX, ToY     int
+	// Buttons is the pressed button mask; must be nonzero for a drag.
+	Buttons int
+	// Steps overrides DefaultDragSteps when > 0.
+	Steps int
+}
+
+// BuildPointerDrag builds and validates a complete drag gesture via the vendored
+// builder, returning the reports in send order (press, intermediates, release).
+// Wrapping it here keeps the client's coordinate validation, its MaxDragSteps
+// bound and its "must include a pressed state" rule as the single source (R3).
+func BuildPointerDrag(o DragOptions) ([]PointerDragReport, error) {
+	steps := o.Steps
+	if steps <= 0 {
+		steps = DefaultDragSteps
+	}
+	return BuildPointerDragReports(o.FromX, o.FromY, o.ToX, o.ToY, o.Buttons, steps)
+}
+
 // TypedReport is one keyboard report a text character expands to: the modifier
 // byte and the up-to-6-byte key-usage buffer the HID protocol carries. It is
 // the narrow shape a caller needs to SEND a typed keypress through the lease,
