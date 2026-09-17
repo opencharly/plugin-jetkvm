@@ -75,3 +75,107 @@ jetkvm-device-host:
     local:
         description: minimal kind:local template for the real-device read-only bed
         candy: []
+
+# The READ-ONLY method-surface bed: exercises one representative method from each
+# read-only family against the live device, proving the catalog's dispatch and
+# JSON rendering beyond status/screenshot. Nothing here mutates the appliance.
+jetkvm-device-methods:
+    local:
+        from: jetkvm-methods-host
+        host: local
+        disposable: true
+        plan:
+            - check: the device identity and firmware are reported over the live wire
+              id: jk-status
+              jetkvm: {method: status, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "rpc:       true"
+              context: [runtime]
+            - check: the local app/system versions are reported
+              id: jk-version
+              jetkvm: {method: version, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "appVersion"
+              context: [runtime]
+            - check: the video pipeline state is reported (ready reflects the capture pipeline, not signal)
+              id: jk-video-state
+              jetkvm: {method: video-state, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "ready"
+              context: [runtime]
+            - check: the USB gadget state is reported
+              id: jk-usb-state
+              jetkvm: {method: usb-state, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the ATX power/HDD LED state is reported
+              id: jk-atx-state
+              jetkvm: {method: atx-state, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "power"
+              context: [runtime]
+            - check: the DC power state is reported
+              id: jk-dc-state
+              jetkvm: {method: dc-state, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the virtual media state is reported
+              id: jk-vm-state
+              jetkvm: {method: virtual-media-state, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the device storage listing is reported
+              id: jk-storage
+              jetkvm: {method: storage-files, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the keyboard layout is reported
+              id: jk-layout
+              jetkvm: {method: keyboard-layout, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "en-US"
+              context: [runtime]
+            - check: the network state is reported
+              id: jk-net-state
+              jetkvm: {method: network-state, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the network settings are reported
+              id: jk-net-settings
+              jetkvm: {method: network-settings, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the tailscale status is reported
+              id: jk-tailscale
+              jetkvm: {method: tailscale-status, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: ""
+              context: [runtime]
+            - check: the available extensions and the active one are reported
+              id: jk-extensions
+              jetkvm: {method: extensions, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "supported: atx-power, dc-power"
+              context: [runtime]
+            - check: the diagnostics summary collects the device facts
+              id: jk-diagnostics
+              jetkvm: {method: diagnostics, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "device_id:"
+              context: [runtime]
+            - check: the raw JSON-RPC escape hatch round-trips a device call
+              id: jk-rpc
+              jetkvm: {method: rpc, rpc_method: ping, host: jk.armadillo-quail.ts.net}
+              stdout:
+                  - contains: "pong"
+              context: [runtime]
+jetkvm-methods-host:
+    local:
+        description: minimal kind:local template for the read-only method-surface bed
+        candy: []
