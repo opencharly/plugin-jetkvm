@@ -57,7 +57,10 @@
 	combo?: string
 	// hold_ms — how long `key`/`combo` holds before release (default 40).
 	hold_ms?: int & >=0 @go(HoldMs,type=int)
-	// x / y — desktop-absolute coordinates (click/mouse/move/drag to).
+	// x / y — ABSOLUTE HID pointer coordinates for click/mouse/move/drag, in
+	// the device's [0,32767] range — NOT desktop pixels. Map a desktop pixel
+	// (px,py) on a WxH screen to (px*32767/(W-1), py*32767/(H-1)); the centre of
+	// a 1920x1080 screen is about (16384,16384).
 	x?: int @go(,type=int)
 	y?: int @go(,type=int)
 	// from_x / from_y — drag start coordinates.

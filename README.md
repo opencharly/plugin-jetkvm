@@ -98,6 +98,18 @@ press a button, whether or not a `button:` is authored. `click` and `drag` press
 the button, which defaults to `left` when no `button:` is authored. So `move` and
 `click` need no `button:`.
 
+Pointer coordinates: `x`/`y` (and `from_x`/`from_y`) are **absolute HID pointer
+coordinates in `[0,32767]`**, not desktop pixels. Convert a desktop pixel
+(`px`,`py`) on a `W`×`H` screen with `px*32767/(W-1)`, `py*32767/(H-1)` — the
+centre of a 1920×1080 screen is about `(16384,16384)`.
+
+Keyboard: `key` presses one named key; `key-combo` presses a chord. Both resolve
+over the full USB HID Keyboard/Keypad usage table, so arbitrary names work —
+letters (`a`), digits (`1`), function keys (`F5`), navigation (`Up`, `PageDown`,
+`Delete`), and modifier chords (`Control_L+Alt_L+Delete`, `ctrl+shift+t`).
+Separators are `+`, `-`, or whitespace; an uppercase letter or shifted symbol
+(`A`, `!`) implies Shift.
+
 ## Development
 
 ```sh

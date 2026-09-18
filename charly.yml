@@ -212,12 +212,52 @@ jetkvm-input-probe:
               context: [runtime]
               eventually: 60s
               retry_interval: 5s
-            - check: move the pointer (a pure move — no button is pressed)
+            - check: move the pointer to the screen centre (HID-absolute 16384,16384 — not pixels)
               id: jkctl-move
               jetkvm:
                   method: move
-                  x: 960
-                  y: 540
+                  x: 16384
+                  y: 16384
+                  allow_control: true
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: click with no button (exercises the documented left default)
+              id: jkctl-click
+              jetkvm:
+                  method: click
+                  x: 16384
+                  y: 16384
+                  allow_control: true
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: drag with no button (exercises the drag left default)
+              id: jkctl-drag
+              jetkvm:
+                  method: drag
+                  from_x: 9000
+                  from_y: 11000
+                  x: 22000
+                  y: 15000
+                  allow_control: true
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: press a named key (F5 — exercises the general key resolver)
+              id: jkctl-key
+              jetkvm:
+                  method: key
+                  key: "F5"
+                  allow_control: true
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: press a modifier chord (exercises the general combo resolver)
+              id: jkctl-combo
+              jetkvm:
+                  method: key-combo
+                  combo: "ctrl+shift+t"
                   allow_control: true
               context: [runtime]
               eventually: 60s
