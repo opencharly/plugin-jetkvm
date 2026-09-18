@@ -383,6 +383,17 @@ func methodType(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInpu
 }
 
 // methodPointer clicks or moves the absolute pointer.
+//
+// `move` and `mouse` are ALWAYS a pure position move: they send the pointer
+// position with a zero button mask and never press a button, whether or not a
+// `button:` is authored (an authored button on a move is still VALIDATED, so an
+// invalid name keeps failing, but it is never sent). `click` presses and
+// releases the button, defaulting to `left`.
+//
+// The bug this fixes: the button was resolved unconditionally, so `move` with
+// NO authored `button:` died with "unknown mouse button" even though it sends no
+// button, and `click` with no `button:` died despite the schema documenting
+// `left` as the default.
 func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInput) (string, error) {
 	if err := validateCoord(in.X, in.Y); err != nil {
 		return "", err
@@ -397,27 +408,34 @@ func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmI
 	}
 	defer func() { _ = held.Release() }()
 
-	button, _, err := kvmclient.ResolveMouseButton(in.Button, "press")
-	if err != nil {
+	// Only `click` sends a button. Resolve it (defaulting to left) for the
+	// click, and validate an authored button on a move without ever sending it,
+	// so behaviour is unchanged except for the two previously-failing cases.
+	label := in.Button
+	if label == "" {
+		label = "left"
+	}
+	press := in.Method == "click"
+	var button byte
+	if press || in.Button != "" {
+		button, _, err = kvmclient.ResolveMouseButton(label, "press")
+		if err != nil {
+			return "", err
+		}
+	}
+	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
+		return "", err
+	}
+	if !press {
+		return fmt.Sprintf("Moved pointer to (%d, %d)", in.X, in.Y), nil
+	}
+	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), button); err != nil {
 		return "", err
 	}
 	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
 		return "", err
 	}
-	if in.Method == "click" {
-		if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), button); err != nil {
-			return "", err
-		}
-		if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
-			return "", err
-		}
-		label := in.Button
-		if label == "" {
-			label = "left"
-		}
-		return fmt.Sprintf("Clicked %s at (%d, %d)", label, in.X, in.Y), nil
-	}
-	return fmt.Sprintf("Moved pointer to (%d, %d)", in.X, in.Y), nil
+	return fmt.Sprintf("Clicked %s at (%d, %d)", label, in.X, in.Y), nil
 }
 
 // methodScroll sends one wheel event via the legacy JSON-RPC wheel path (the
@@ -447,7 +465,14 @@ func methodDrag(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInpu
 	}
 	defer func() { _ = held.Release() }()
 
-	button, _, err := kvmclient.ResolveMouseButton(in.Button, "press")
+	// The schema documents `button` as defaulting to left, so resolve the
+	// default here rather than passing "" into the resolver (drag with no
+	// authored button previously failed with "unknown mouse button").
+	label := in.Button
+	if label == "" {
+		label = "left"
+	}
+	button, _, err := kvmclient.ResolveMouseButton(label, "press")
 	if err != nil {
 		return "", err
 	}

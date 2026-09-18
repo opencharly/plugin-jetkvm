@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/opencharly/plugin-jetkvm/candy/plugin-jetkvm/internal/kvmclient"
 	"github.com/opencharly/plugin-jetkvm/candy/plugin-jetkvm/params"
@@ -62,15 +63,26 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 		return sdk.ResultJSON("skip", fmt.Sprintf("jetkvm: %s requires a live device (skip under charly check box)", method))
 	}
 
-	// Resolve the device address: the authored host first, then the deploy
-	// venue's address when the step omitted it (the "connect to whatever this
-	// deployment is" shape). No address at all is the honest no-context skip.
+	// Resolve the device address: the authored host first, then the
+	// JETKVM_HOST environment variable, then the deploy venue's address when the
+	// step omitted it (the "connect to whatever this deployment is" shape). No
+	// address at all is the honest no-context skip.
+	//
+	// JETKVM_HOST is the deployment-neutral escape hatch: a bed or plan can
+	// carry NO device address (so no tailnet hostname is ever committed), and the
+	// operator supplies the device — the same shape as JETKVM_AUTH_TOKEN /
+	// JETKVM_PASSWORD. The env var is read on the plugin side; the host passes
+	// the full environment to the plugin process (childCharlyEnv forwards
+	// os.Environ()).
 	host := in.Host
+	if host == "" {
+		host = os.Getenv("JETKVM_HOST")
+	}
 	if host == "" {
 		host = env.Host
 	}
 	if host == "" {
-		return sdk.ResultJSON("skip", fmt.Sprintf("jetkvm: %s has no device address (author `host:`, or run against a deploy that supplies one; box=%q)", method, env.Box))
+		return sdk.ResultJSON("skip", fmt.Sprintf("jetkvm: %s has no device address (author `host:`, set JETKVM_HOST, or run against a deploy that supplies one; box=%q)", method, env.Box))
 	}
 
 	password, err := resolveSecret(ctx, req.GetExecutorBrokerId(), in.Password, in.PasswordSecret)

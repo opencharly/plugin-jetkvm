@@ -29,7 +29,9 @@
 
 	// --- connection -------------------------------------------------------
 	// host — the device address ("host", "host:port", or an http(s) URL). When
-	// omitted the provider falls back to the deploy's venue address.
+	// omitted the provider falls back to the JETKVM_HOST environment variable,
+	// then to the deploy's venue address. Authoring no host (and setting
+	// JETKVM_HOST) keeps a device-specific hostname out of a committed plan.
 	host?: string & !=""
 	// password — the device password. Prefer password_secret (the credential
 	// store); this literal exists for ad-hoc/CI use.
@@ -55,13 +57,18 @@
 	combo?: string
 	// hold_ms — how long `key`/`combo` holds before release (default 40).
 	hold_ms?: int & >=0 @go(HoldMs,type=int)
-	// x / y — desktop-absolute coordinates (click/mouse/move/drag to).
+	// x / y — ABSOLUTE HID pointer coordinates for click/mouse/move/drag, in
+	// the device's [0,32767] range — NOT desktop pixels. Map a desktop pixel
+	// (px,py) on a WxH screen to (px*32767/(W-1), py*32767/(H-1)); the centre of
+	// a 1920x1080 screen is about (16384,16384).
 	x?: int @go(,type=int)
 	y?: int @go(,type=int)
 	// from_x / from_y — drag start coordinates.
 	from_x?: int @go(FromX,type=int)
 	from_y?: int @go(FromY,type=int)
-	// button — pointer button (left/right/middle; default left).
+	// button — pointer button (left/right/middle; default left). Used by `click`
+	// and `drag`. `move`/`mouse` are pure position moves and NEVER press a
+	// button, so a `button:` on them is validated but not sent.
 	button?: string
 	// scroll_x / scroll_y — wheel deltas (scroll).
 	scroll_x?: int @go(ScrollX,type=int)

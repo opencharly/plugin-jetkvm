@@ -88,6 +88,30 @@ Credentials: prefer `password_secret:` (the `verb:credential` store) or the
 `JETKVM_AUTH_TOKEN` / `JETKVM_PASSWORD` environment variables. Never commit a
 device password to a `charly.yml`.
 
+Device address: author `host:` for an explicit device, or set **`JETKVM_HOST`**
+and author none — the provider falls back to the environment before the deploy
+venue. Using `JETKVM_HOST` keeps a device-specific hostname out of a committed
+plan, so a bed can be portable and carry no tailnet name.
+
+Input semantics: `move` and `mouse` are **pure position moves** — they never
+press a button, whether or not a `button:` is authored. `click` and `drag` press
+the button, which defaults to `left` when no `button:` is authored. So `move` and
+`click` need no `button:`.
+
+Pointer coordinates: `x`/`y` (and `from_x`/`from_y`) are **absolute HID pointer
+coordinates in `[0,32767]`**, not desktop pixels. Convert a desktop pixel
+(`px`,`py`) on a `W`×`H` screen with `px*32767/(W-1)`, `py*32767/(H-1)` — the
+centre of a 1920×1080 screen is about `(16384,16384)`.
+
+Keyboard: `key` presses one named key; `key-combo` presses a chord. Both resolve
+over the common USB HID Keyboard/Keypad usages, so these names work — letters
+(`a`–`z`), digits (`0`–`9`), function keys (`F1`–`F12`), navigation and editing
+keys (`Enter`, `Escape`, `Tab`, arrows, `Home`, `End`, `PageUp`, `PageDown`,
+`Insert`, `Delete`, `Backspace`), punctuation, and modifier chords
+(`Control_L+Alt_L+Delete`, `ctrl+shift+t`). Names outside that set fail with
+`unknown key`. Separators are `+`, `-`, or whitespace; an uppercase letter or
+shifted symbol (`A`, `!`) implies Shift.
+
 ## Development
 
 ```sh
