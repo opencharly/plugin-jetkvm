@@ -104,11 +104,13 @@ coordinates in `[0,32767]`**, not desktop pixels. Convert a desktop pixel
 centre of a 1920×1080 screen is about `(16384,16384)`.
 
 Keyboard: `key` presses one named key; `key-combo` presses a chord. Both resolve
-over the full USB HID Keyboard/Keypad usage table, so arbitrary names work —
-letters (`a`), digits (`1`), function keys (`F5`), navigation (`Up`, `PageDown`,
-`Delete`), and modifier chords (`Control_L+Alt_L+Delete`, `ctrl+shift+t`).
-Separators are `+`, `-`, or whitespace; an uppercase letter or shifted symbol
-(`A`, `!`) implies Shift.
+over the common USB HID Keyboard/Keypad usages, so these names work — letters
+(`a`–`z`), digits (`0`–`9`), function keys (`F1`–`F12`), navigation and editing
+keys (`Enter`, `Escape`, `Tab`, arrows, `Home`, `End`, `PageUp`, `PageDown`,
+`Insert`, `Delete`, `Backspace`), punctuation, and modifier chords
+(`Control_L+Alt_L+Delete`, `ctrl+shift+t`). Names outside that set fail with
+`unknown key`. Separators are `+`, `-`, or whitespace; an uppercase letter or
+shifted symbol (`A`, `!`) implies Shift.
 
 ## Development
 

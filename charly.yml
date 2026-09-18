@@ -192,8 +192,8 @@ jetkvm-methods-host:
 # physical device and is never disposable. It types into whatever machine the KVM
 # is attached to, so run it only when that is intended.
 #
-#   eval "$(charly-jetkvm env --host root@<device> --export)"
-#   charly check run jetkvm-input-probe
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-input-probe
 #
 # The typed text is a harmless marker; pick one that is safe for the attached
 # host (a shell prompt, an empty editor, etc.).

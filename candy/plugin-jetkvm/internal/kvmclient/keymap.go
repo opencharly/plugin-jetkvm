@@ -6,16 +6,18 @@ package kvmclient
 // (alt+tab, ctrl+c, …), so `jetkvm: {method: key, key: "F5"}` or
 // `{method: key-combo, combo: "Control_L+Alt_L+Delete"}` — both documented by
 // the plugin's schema — FAILED with "unknown key combo". This file replaces
-// that registry with a real resolver over the USB HID Keyboard/Keypad usage
-// table, so any single key or chord works: letters, digits, function keys,
-// arrows, navigation keys, punctuation, and the modifier keys.
+// that registry with a resolver over the common USB HID Keyboard/Keypad usages:
+// letters `a`–`z`, digits `0`–`9`, function keys `F1`–`F12`, the navigation/
+// editing keys (`Enter`, `Escape`, `Tab`, arrows, `Home`, `End`, `PageUp`,
+// `PageDown`, `Insert`, `Delete`, `Backspace`), punctuation, and the modifier
+// keys. Names outside that set still fail with `unknown key`; the table is a
+// curated common set, not the entire HID usage page.
 //
 // The wire contract is unchanged: a modifier byte plus up to six key usages,
 // exactly what sendKeyboardReport consumes.
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"unicode"
 )
@@ -166,7 +168,7 @@ func resolveToken(tok string, shift *byte) (mod, key byte, err error) {
 //	"F5"                       -> key 0x3e
 //	"Return" / "Enter"         -> key 0x28
 //	"Control_L+Alt_L+Delete"   -> modifier ctrl|alt, key 0x4c
-//	"ctrl+shift+t"             -> modifier ctrl|shift, key 0x14
+//	"ctrl+shift+t"             -> modifier ctrl|shift, key 0x17 (t)
 //	"A" / "a"                  -> key 0x04 (shifted for the uppercase form)
 //
 // Modifier tokens compose the report's modifier byte; all non-modifier tokens
@@ -229,15 +231,4 @@ func ResolveKeySequence(names []string) ([]ResolvedKeyCombo, error) {
 		resolved[i] = ResolvedKeyCombo{Modifier: modifier, Keys: keys}
 	}
 	return resolved, nil
-}
-
-// validKeyComboNames is retained for error messages and tests: the sorted list
-// of representative key names the resolver recognizes.
-func validKeyComboNames() []string {
-	names := make([]string, 0, len(keyUsages))
-	for name := range keyUsages {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }

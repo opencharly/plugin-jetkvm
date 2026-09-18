@@ -68,3 +68,16 @@ func TestResolveKeyComboRegressionOldRegistry(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveKeyComboLoneModifier pins that the schema's documented lone
+// modifier ("Control_L") resolves: press+release of a modifier is one report
+// with the modifier bit and no key usages, which the report validator accepts.
+func TestResolveKeyComboLoneModifier(t *testing.T) {
+	mod, keys, err := ResolveKeyCombo("Control_L")
+	if err != nil {
+		t.Fatalf("Control_L must resolve: %v", err)
+	}
+	if mod != ModifierLeftControl || len(keys) != 0 {
+		t.Fatalf("Control_L -> mod=0x%02x keys=%v, want ctrl, no keys", mod, keys)
+	}
+}
