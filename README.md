@@ -93,6 +93,11 @@ and author none — the provider falls back to the environment before the deploy
 venue. Using `JETKVM_HOST` keeps a device-specific hostname out of a committed
 plan, so a bed can be portable and carry no tailnet name.
 
+Input semantics: `move` and `mouse` are **pure position moves** — they never
+press a button, whether or not a `button:` is authored. `click` and `drag` press
+the button, which defaults to `left` when no `button:` is authored. So `move` and
+`click` need no `button:`.
+
 ## Development
 
 ```sh

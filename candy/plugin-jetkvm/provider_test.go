@@ -393,3 +393,46 @@ func TestInvokeNoHostAnywhereSkips(t *testing.T) {
 		t.Fatalf("the skip should name JETKVM_HOST, got %q", msg)
 	}
 }
+
+// TestInvokeDragDefaultsToLeft verifies `drag` with no `button:` works — the
+// schema documents button default left, and drag previously failed with
+// "unknown mouse button" when none was authored.
+func TestInvokeDragDefaultsToLeft(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	status, msg := invoke(t,
+		map[string]any{"method": "drag", "host": dev.BaseURL(),
+			"from_x": 10, "from_y": 10, "x": 20, "y": 20, "allow_control": true},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("drag with no button must pass (default left), got %q (%s)", status, msg)
+	}
+}
+
+// TestInvokeMoveWithButtonStaysAPureMove pins the preserved semantics: a move
+// that authors a button still sends NO button (a pure move), and an INVALID
+// button name on a move still fails validation.
+func TestInvokeMoveWithButtonStaysAPureMove(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	status, msg := invoke(t,
+		map[string]any{"method": "move", "host": dev.BaseURL(), "x": 5, "y": 6,
+			"button": "right", "allow_control": true},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("move with a valid button must pass, got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "Moved pointer") {
+		t.Fatalf("move must stay a pure move even with a button, got %q", msg)
+	}
+	abs, _ := dev.MouseInterfaceState()
+	if abs.Buttons != 0 {
+		t.Fatalf("move must send a zero button mask, got %d", abs.Buttons)
+	}
+	// An invalid button name on a move is still validated and fails.
+	status, _ = invoke(t,
+		map[string]any{"method": "move", "host": dev.BaseURL(), "x": 5, "y": 6,
+			"button": "bogus", "allow_control": true},
+		map[string]any{"mode": "live"})
+	if status != "fail" {
+		t.Fatalf("an invalid button on a move must still fail validation, got %q", status)
+	}
+}

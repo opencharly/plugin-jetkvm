@@ -63,7 +63,9 @@
 	// from_x / from_y — drag start coordinates.
 	from_x?: int @go(FromX,type=int)
 	from_y?: int @go(FromY,type=int)
-	// button — pointer button (left/right/middle; default left).
+	// button — pointer button (left/right/middle; default left). Used by `click`
+	// and `drag`. `move`/`mouse` are pure position moves and NEVER press a
+	// button, so a `button:` on them is validated but not sent.
 	button?: string
 	// scroll_x / scroll_y — wheel deltas (scroll).
 	scroll_x?: int @go(ScrollX,type=int)

@@ -384,12 +384,16 @@ func methodType(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInpu
 
 // methodPointer clicks or moves the absolute pointer.
 //
-// `move`/`mouse` WITHOUT a button is a pure position move: no button bit is
-// sent, so no `button:` is required and none is resolved. `click` (and
-// `move`/`mouse` WITH a `button:`) presses and releases the named button at the
-// position. Resolving the button unconditionally was the bug: `move` with no
-// authored `button:` failed with "unknown mouse button" even though it sends no
-// button at all.
+// `move` and `mouse` are ALWAYS a pure position move: they send the pointer
+// position with a zero button mask and never press a button, whether or not a
+// `button:` is authored (an authored button on a move is still VALIDATED, so an
+// invalid name keeps failing, but it is never sent). `click` presses and
+// releases the button, defaulting to `left`.
+//
+// The bug this fixes: the button was resolved unconditionally, so `move` with
+// NO authored `button:` died with "unknown mouse button" even though it sends no
+// button, and `click` with no `button:` died despite the schema documenting
+// `left` as the default.
 func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInput) (string, error) {
 	if err := validateCoord(in.X, in.Y); err != nil {
 		return "", err
@@ -404,16 +408,16 @@ func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmI
 	}
 	defer func() { _ = held.Release() }()
 
-	// A click, or any method that explicitly names a button, presses it; a bare
-	// move sends no button. The schema documents `button` as defaulting to left,
-	// so resolve the default here rather than passing "" into the resolver.
+	// Only `click` sends a button. Resolve it (defaulting to left) for the
+	// click, and validate an authored button on a move without ever sending it,
+	// so behaviour is unchanged except for the two previously-failing cases.
 	label := in.Button
 	if label == "" {
 		label = "left"
 	}
-	press := in.Method == "click" || in.Button != ""
+	press := in.Method == "click"
 	var button byte
-	if press {
+	if press || in.Button != "" {
 		button, _, err = kvmclient.ResolveMouseButton(label, "press")
 		if err != nil {
 			return "", err
@@ -461,7 +465,14 @@ func methodDrag(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInpu
 	}
 	defer func() { _ = held.Release() }()
 
-	button, _, err := kvmclient.ResolveMouseButton(in.Button, "press")
+	// The schema documents `button` as defaulting to left, so resolve the
+	// default here rather than passing "" into the resolver (drag with no
+	// authored button previously failed with "unknown mouse button").
+	label := in.Button
+	if label == "" {
+		label = "left"
+	}
+	button, _, err := kvmclient.ResolveMouseButton(label, "press")
 	if err != nil {
 		return "", err
 	}

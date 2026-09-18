@@ -182,21 +182,24 @@ jetkvm-methods-host:
         description: minimal kind:local template for the read-only method-surface bed
         candy: []
 
-# The CONTROL bed: drives input (pointer move + a typed string) between two
-# screenshots, proving the mutating path end to end. It is env-driven like the
-# read-only beds (JETKVM_HOST + JETKVM_AUTH_TOKEN), and every mutating method
-# carries allow_control: true — the device-safety gate. It is intentionally NOT
-# listed as `disposable: true` input to anything destructive; it types into
-# whatever machine the KVM is attached to, so run it only when that is intended.
+# The INPUT bed: drives input (pointer move + a typed string) between two
+# screenshots, proving the mutating path end to end. Env-driven like the
+# read-only beds (JETKVM_HOST + JETKVM_AUTH_TOKEN); every mutating method carries
+# allow_control: true — the device-safety gate.
 #
-#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
-#     charly check run jetkvm-control-readonly-input
+# `disposable: true` here refers to the LOCAL check deployment (the host-local
+# `charly` deploy the bed creates), NOT to the JetKVM: the appliance is a
+# physical device and is never disposable. It types into whatever machine the KVM
+# is attached to, so run it only when that is intended.
+#
+#   eval "$(charly-jetkvm env --host root@<device> --export)"
+#   charly check run jetkvm-input-probe
 #
 # The typed text is a harmless marker; pick one that is safe for the attached
 # host (a shell prompt, an empty editor, etc.).
-jetkvm-control-readonly-input:
+jetkvm-input-probe:
     local:
-        from: jetkvm-control-host
+        from: jetkvm-input-host
         host: local
         disposable: true
         plan:
@@ -237,7 +240,7 @@ jetkvm-control-readonly-input:
               context: [runtime]
               eventually: 60s
               retry_interval: 5s
-jetkvm-control-host:
+jetkvm-input-host:
     local:
-        description: minimal kind:local template for the control bed
+        description: minimal kind:local template for the input bed
         candy: []
