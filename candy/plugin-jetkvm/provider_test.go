@@ -308,3 +308,88 @@ func TestRawRPCWithControlReachesOrdinaryMethod(t *testing.T) {
 		t.Fatalf("expected the pong result, got %q", msg)
 	}
 }
+
+// TestInvokeMoveWithoutButtonIsAPureMove pins the `move` contract: a bare move
+// (no `button:`) sends the pointer to (x,y) with NO button bit and must PASS.
+// The regression this guards: methodPointer resolved a mouse button
+// unconditionally, so `move` with no authored button failed with
+// "unknown mouse button" even though a move presses no button.
+func TestInvokeMoveWithoutButtonIsAPureMove(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	status, msg := invoke(t,
+		map[string]any{"method": "move", "host": dev.BaseURL(), "x": 960, "y": 540, "allow_control": true},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("a bare move must pass (no button is sent), got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "Moved pointer to (960, 540)") {
+		t.Fatalf("move output should report the position, got %q", msg)
+	}
+	abs, _ := dev.MouseInterfaceState()
+	if abs.X != 960 || abs.Y != 540 {
+		t.Fatalf("device saw pointer at (%d,%d), want (960,540)", abs.X, abs.Y)
+	}
+	if abs.Buttons != 0 {
+		t.Fatalf("a pure move must leave the button mask at 0, got %d", abs.Buttons)
+	}
+}
+
+// TestInvokeClickDefaultsToLeft verifies `click` with no button still presses
+// left — the default the pointer path documents.
+func TestInvokeClickDefaultsToLeft(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	status, msg := invoke(t,
+		map[string]any{"method": "click", "host": dev.BaseURL(), "x": 100, "y": 200, "allow_control": true},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("click with defaults must pass, got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "Clicked left at (100, 200)") {
+		t.Fatalf("click should report the default left button, got %q", msg)
+	}
+}
+
+// TestInvokeHostFromEnv verifies the JETKVM_HOST fallback: a step with NO
+// authored host connects to the env-provided address, so a bed can be portable
+// and carry no device-specific hostname.
+func TestInvokeHostFromEnv(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	t.Setenv("JETKVM_HOST", dev.BaseURL())
+	status, msg := invoke(t,
+		map[string]any{"method": "status"},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("JETKVM_HOST must supply the device address, got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "rpc:       true") {
+		t.Fatalf("status via JETKVM_HOST should connect to the fake, got %q", msg)
+	}
+}
+
+// TestInvokeAuthoredHostBeatsEnv verifies precedence: an authored `host:` wins
+// over JETKVM_HOST.
+func TestInvokeAuthoredHostBeatsEnv(t *testing.T) {
+	dev := fakedevice.Start(t, fakedevice.Options{})
+	t.Setenv("JETKVM_HOST", "http://127.0.0.1:1") // an address that cannot answer
+	status, msg := invoke(t,
+		map[string]any{"method": "status", "host": dev.BaseURL()},
+		map[string]any{"mode": "live"})
+	if status != "pass" {
+		t.Fatalf("authored host must beat JETKVM_HOST, got %q (%s)", status, msg)
+	}
+}
+
+// TestInvokeNoHostAnywhereSkips verifies that with no authored host, no
+// JETKVM_HOST and no venue host, the verb reports the documented skip.
+func TestInvokeNoHostAnywhereSkips(t *testing.T) {
+	t.Setenv("JETKVM_HOST", "")
+	status, msg := invoke(t,
+		map[string]any{"method": "status"},
+		map[string]any{"mode": "live"})
+	if status != "skip" {
+		t.Fatalf("no address must skip, got %q (%s)", status, msg)
+	}
+	if !strings.Contains(msg, "JETKVM_HOST") {
+		t.Fatalf("the skip should name JETKVM_HOST, got %q", msg)
+	}
+}

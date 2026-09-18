@@ -88,6 +88,11 @@ Credentials: prefer `password_secret:` (the `verb:credential` store) or the
 `JETKVM_AUTH_TOKEN` / `JETKVM_PASSWORD` environment variables. Never commit a
 device password to a `charly.yml`.
 
+Device address: author `host:` for an explicit device, or set **`JETKVM_HOST`**
+and author none — the provider falls back to the environment before the deploy
+venue. Using `JETKVM_HOST` keeps a device-specific hostname out of a committed
+plan, so a bed can be portable and carry no tailnet name.
+
 ## Development
 
 ```sh

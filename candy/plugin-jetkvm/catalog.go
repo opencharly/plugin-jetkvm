@@ -383,6 +383,13 @@ func methodType(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInpu
 }
 
 // methodPointer clicks or moves the absolute pointer.
+//
+// `move`/`mouse` WITHOUT a button is a pure position move: no button bit is
+// sent, so no `button:` is required and none is resolved. `click` (and
+// `move`/`mouse` WITH a `button:`) presses and releases the named button at the
+// position. Resolving the button unconditionally was the bug: `move` with no
+// authored `button:` failed with "unknown mouse button" even though it sends no
+// button at all.
 func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInput) (string, error) {
 	if err := validateCoord(in.X, in.Y); err != nil {
 		return "", err
@@ -397,27 +404,34 @@ func methodPointer(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmI
 	}
 	defer func() { _ = held.Release() }()
 
-	button, _, err := kvmclient.ResolveMouseButton(in.Button, "press")
-	if err != nil {
+	// A click, or any method that explicitly names a button, presses it; a bare
+	// move sends no button. The schema documents `button` as defaulting to left,
+	// so resolve the default here rather than passing "" into the resolver.
+	label := in.Button
+	if label == "" {
+		label = "left"
+	}
+	press := in.Method == "click" || in.Button != ""
+	var button byte
+	if press {
+		button, _, err = kvmclient.ResolveMouseButton(label, "press")
+		if err != nil {
+			return "", err
+		}
+	}
+	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
+		return "", err
+	}
+	if !press {
+		return fmt.Sprintf("Moved pointer to (%d, %d)", in.X, in.Y), nil
+	}
+	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), button); err != nil {
 		return "", err
 	}
 	if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
 		return "", err
 	}
-	if in.Method == "click" {
-		if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), button); err != nil {
-			return "", err
-		}
-		if err := held.SendPointerReport(ctx, int32(in.X), int32(in.Y), 0); err != nil {
-			return "", err
-		}
-		label := in.Button
-		if label == "" {
-			label = "left"
-		}
-		return fmt.Sprintf("Clicked %s at (%d, %d)", label, in.X, in.Y), nil
-	}
-	return fmt.Sprintf("Moved pointer to (%d, %d)", in.X, in.Y), nil
+	return fmt.Sprintf("Clicked %s at (%d, %d)", label, in.X, in.Y), nil
 }
 
 // methodScroll sends one wheel event via the legacy JSON-RPC wheel path (the

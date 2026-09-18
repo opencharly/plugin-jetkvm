@@ -29,7 +29,9 @@
 
 	// --- connection -------------------------------------------------------
 	// host — the device address ("host", "host:port", or an http(s) URL). When
-	// omitted the provider falls back to the deploy's venue address.
+	// omitted the provider falls back to the JETKVM_HOST environment variable,
+	// then to the deploy's venue address. Authoring no host (and setting
+	// JETKVM_HOST) keeps a device-specific hostname out of a committed plan.
 	host?: string & !=""
 	// password — the device password. Prefer password_secret (the credential
 	// store); this literal exists for ad-hoc/CI use.
