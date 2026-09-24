@@ -5,7 +5,7 @@
 # including one with a malformed `plugin.providers` entry. Declaring discover:
 # is the whole fix: the candy is scanned, the CUE schema gate applies, and the
 # stock `charly box validate` step starts working with no workflow change.
-version: 2026.249.2125
+version: 2026.261.1747
 discover:
     - path: candy
       recursive: true
@@ -280,7 +280,93 @@ jetkvm-input-probe:
               context: [runtime]
               eventually: 60s
               retry_interval: 5s
+            - check: the HID wake report reaches the controlled host (upstream's wakeHost RPC; wakes a display-asleep host)
+              id: jkctl-wake-host
+              jetkvm:
+                  method: wake-host
+                  allow_control: true
+              stdout:
+                  - contains: "HID wake report sent"
+              context: [runtime]
 jetkvm-input-host:
     local:
         description: minimal kind:local template for the input bed
         candy: []
+
+# The OCR bed, read-only: proves the new `ocr` method reads the live screen and
+# asserts text, and that a NEGATIVE assertion fails loudly (the validator really
+# reads pixels, not passing vacuously). Env-driven like the other device beds.
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-ocr-readonly
+jetkvm-ocr-readonly:
+    local:
+        from: jetkvm-ocr-host
+        host: local
+        disposable: true
+        plan:
+            - check: the ocr method reads the live screen and finds the Omarchy greeter text
+              id: jk-ocr-positive
+              jetkvm:
+                  method: ocr
+                  text: Press Return to Start Install
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: a NEGATIVE ocr assertion fails loudly (proving the method reads pixels, not passing vacuously) — asserted by requiring exit 1 and the not-found message
+              id: jk-ocr-negative
+              jetkvm:
+                  method: ocr
+                  text: ZZZ-definitely-not-on-any-screen-ZZZ
+              exit_status: 1
+              stderr:
+                  - contains: "does not contain"
+              context: [runtime]
+              eventually: 12s
+              retry_interval: 4s
+jetkvm-ocr-host:
+    local:
+        description: minimal kind:local template for the OCR bed
+        candy: []
+
+# The INSTALL-DRIVER bed, read-only in EFFECT: it drives the first two wizard
+# transitions and then STOPS before anything is written to disk (no disk step is
+# reached). It proves the `install` method walks a recipe, OCR-gates each screen
+# and sends input on ONE session — the mechanism, exercised live without wiping a
+# machine. The FULL destructive install is a deliberate operator action (the
+# check-omarchy-jetkvm-install bed in distro-omarchy), never CI.
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-install-probe
+jetkvm-install-probe:
+    local:
+        from: jetkvm-install-host
+        host: local
+        disposable: true
+        plan:
+            - check: the install driver walks the first wizard screens on ONE session (greeter to keyboard), then stops before any disk step
+              id: jk-install-probe
+              jetkvm:
+                  method: install
+                  allow_control: true
+                  steps:
+                      - wait_for: Press Return to Start Install
+                        action: key
+                        key: Return
+                        description: accept the greeter
+                      - wait_for: Select keyboard layout
+                        action: key
+                        key: Return
+                        description: accept the keyboard layout
+                # NOTE: the recipe deliberately stops here. Reaching the disk
+                # step would overwrite a machine; this bed proves the DRIVER.
+              stdout:
+                  - contains: "step 2"
+              context: [runtime]
+              eventually: 180s
+              retry_interval: 5s
+jetkvm-install-host:
+    local:
+        description: minimal kind:local template for the install-driver probe bed
+        candy: []
+

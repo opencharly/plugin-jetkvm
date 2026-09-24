@@ -31,17 +31,22 @@ var schemaFS embed.FS
 // NewProvider returns the jetkvm provider.
 func NewProvider() pb.ProviderServer { return &provider{} }
 
-// NewMeta advertises verb:jetkvm + the plugin's self-contained CUE schema via
-// sdk.NewMeta -> BuildCapabilities. The verb's entire authoring contract — the
-// #JetkvmMethod catalog plus every jetkvm-exclusive modifier — lives in the
-// served #JetkvmInput (schema/jetkvm.cue), which the host splices onto the base
-// and validates every authored `jetkvm:` step's plugin_input against.
+// NewMeta advertises verb:jetkvm + kind:jetkvm + the plugin's self-contained
+// CUE schema via sdk.NewMeta -> BuildCapabilities. The verb's entire authoring
+// contract — the #JetkvmMethod catalog plus every jetkvm-exclusive modifier —
+// lives in the served #JetkvmInput (schema/jetkvm.cue), which the host splices
+// onto the base and validates every authored `jetkvm:` step's plugin_input
+// against. The kind's contract is #JetkvmDeviceInput — the device + installer
+// entity the host validates and folds into uf.PluginKinds["jetkvm"].
 func NewMeta() pb.PluginMetaServer {
 	return sdk.NewMeta("2026.258.1200",
-		[]sdk.ProvidedCapability{{
-			Class:    "verb",
-			Word:     "jetkvm",
-			InputDef: "#JetkvmInput",
-		}},
+		[]sdk.ProvidedCapability{
+			{
+				Class:    "verb",
+				Word:     "jetkvm",
+				InputDef: "#JetkvmInput",
+			},
+			kindCapability(),
+		},
 		schemaFS)
 }

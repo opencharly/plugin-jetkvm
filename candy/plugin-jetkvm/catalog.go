@@ -32,6 +32,8 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 		return methodStatus(ctx, cl)
 	case "screenshot":
 		return methodScreenshot(ctx, cl, in, op)
+	case "ocr":
+		return methodOcr(ctx, cl, in)
 	case "version":
 		return callSummary(ctx, cl, "getLocalVersion", nil)
 	case "video-state":
@@ -84,6 +86,8 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 		return methodKeys(ctx, cl, in)
 	case "type":
 		return methodType(ctx, cl, in)
+	case "install":
+		return runInstall(ctx, cl, op, in)
 	case "click", "mouse", "move":
 		return methodPointer(ctx, cl, in)
 	case "scroll":
@@ -100,6 +104,8 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 		return methodReboot(ctx, cl)
 	case "wol":
 		return methodWOL(ctx, cl, in)
+	case "wake-host":
+		return methodWakeHost(ctx, cl)
 
 	// --- media / usb (mutating, gated) ------------------------------------
 	case "virtual-media":
@@ -548,6 +554,18 @@ func methodWOL(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmInput
 		return "", err
 	}
 	return fmt.Sprintf("WOL magic packet sent to %s", in.Value), nil
+}
+
+// methodWakeHost asks the DEVICE to emit its USB HID wake report, which wakes a
+// host that is display-asleep (DPMS) rather than powered off. This is the
+// upstream `wakeHost` RPC (jetkvm/kvm usb.go): the device's own gadget-based
+// wake, not a synthetic key press — so it is the proper wake path, and it is
+// distinct from `wol` (a magic packet, which only helps a powered-off host).
+func methodWakeHost(ctx context.Context, cl *kvmclient.Client) (string, error) {
+	if _, err := callSummary(ctx, cl, "wakeHost", nil); err != nil {
+		return "", err
+	}
+	return "HID wake report sent to the controlled host", nil
 }
 
 // --- media / usb ----------------------------------------------------------

@@ -139,6 +139,52 @@ type JetkvmInput struct {
 	// rpc_params — the JSON object of params for `rpc`.
 	RpcParams string `json:"rpc_params,omitempty"`
 
+	// --- console OCR / installer -----------------------------------------
+	// OCR is the read-only screen-reading method: capture the frame, run OCR
+	// over it, and assert `text` (the field above, shared with `type`) is
+	// present. It is the wait-for-screen primitive in `check:`/`run:` form (no
+	// artifact required), the sibling of the `artifact_contains_text` validator
+	// on `screenshot`.
+	// install is the configurable console-wizard DRIVER (mutating): connect
+	// once and walk an ordered `steps:` recipe, OCR-waiting for each screen's
+	// anchor before sending its input. The recipe is generic DATA — the Omarchy
+	// (or any) installer's screens are supplied by the entity, never hardcoded
+	// here. It drives ANY text-console wizard: an OS installer, a first-boot
+	// provisioning flow, a firmware setup screen.
+	// steps — an INLINE recipe the `install` method drives (wins over the
+	// entity recipe).
+	Steps []JetkvmInstallStep `json:"steps,omitempty"`
+
+	// device — the name of a `kind: jetkvm` device entity whose named recipe
+	// (`recipe:`) this step uses INSTEAD of inline steps:. The verb resolves it
+	// out-of-process over its reverse channel, so recipes live in one place in
+	// charly.yml and a bed references them by name.
+	Device string `json:"device,omitempty"`
+
+	// recipe — WHICH named recipe on the device entity to drive (default
+	// "install"). A device can carry several — e.g. `install` for the OS
+	// installer and `first_boot` for the post-reboot owner-provisioning wizard.
+	Recipe string `json:"recipe,omitempty"`
+
+	// answers — a name → value map `install` substitutes into every step's
+	// `text` via `{{name}}` placeholders, so one recipe serves many machines
+	// without editing the steps. The substitution is literal + single-pass
+	// (NOT charly `${VAR}` expansion), independent of the check env.
+	Answers map[string]string `json:"answers,omitempty"`
+
+	// answer_secrets — a name → CREDENTIAL-STORE KEY map, resolved at run time
+	// and merged into `answers`. Use it for anything secret (a password, a LUKS
+	// passphrase): the value is read from the credential store over the reverse
+	// channel and NEVER appears in charly.yml. Explicit `answers` entries win.
+	AnswerSecrets map[string]string `json:"answer_secrets,omitempty"`
+
+	// answers_env — a name → ENVIRONMENT-VARIABLE-NAME map, resolved at run time
+	// and merged into `answers`. The fully-configurable-from-the-environment
+	// path: the operator sets the env var and the recipe's {{placeholder}}
+	// resolves to it, with nothing machine-specific committed. Precedence:
+	// answers (authored) > answer_secrets > answers_env.
+	AnswersEnv map[string]string `json:"answers_env,omitempty"`
+
 	// --- artifact ---------------------------------------------------------
 	// artifact — the host path `screenshot` writes the PNG to.
 	Artifact string `json:"artifact,omitempty"`
@@ -166,13 +212,21 @@ type JetkvmInput struct {
 
 	Phase string `json:"phase,omitempty"`
 
-	// artifact_min_bytes / artifact_min_dimensions / artifact_not_uniform —
-	// the post-run artifact-reality assertions (sdk.RunArtifactValidators).
+	// artifact_min_bytes / artifact_min_dimensions / artifact_not_uniform /
+	// artifact_min_cast_events / artifact_contains_text — the post-run
+	// artifact-reality assertions (sdk.RunArtifactValidators). artifact_contains_text
+	// is the OCR wait-for-screen primitive in `screenshot` form: it runs
+	// tesseract on the HOST over the pulled PNG and asserts the text is present,
+	// so a `screenshot` step can gate on what the screen actually shows.
 	ArtifactMinBytes int `json:"artifact_min_bytes,omitempty"`
 
 	ArtifactMinDimensions string `json:"artifact_min_dimensions,omitempty"`
 
 	ArtifactNotUniform bool `json:"artifact_not_uniform,omitempty"`
+
+	ArtifactMinCastEvents int `json:"artifact_min_cast_events,omitempty"`
+
+	ArtifactContainsText string `json:"artifact_contains_text,omitempty"`
 }
 
 // #JetkvmMethod — the method catalog. Grouped by intent so the read-only
@@ -190,4 +244,94 @@ type JetkvmMacroStep struct {
 	Modifiers []string `json:"modifiers,omitempty"`
 
 	Delay int64 `json:"delay,omitempty"`
+}
+
+// #JetkvmInstallStep — ONE step of a console-installer recipe driven by the
+// `install` method. Each step OCR-waits for its `wait_for` anchor to appear on
+// the screen, then performs ONE input action. `wait_for` MUST be a
+// screen-UNIQUE string: a string present on every screen (e.g. a logo) passes
+// vacuously and desynchronises the whole drive.
+type JetkvmInstallStep struct {
+	// wait_for — screen-unique text the step waits for before acting.
+	WaitFor string `json:"wait_for"`
+
+	// action — the input to send once `wait_for` is on screen. Omitted means the
+	// step only waits (a pure synchronisation/observation step).
+	Action string `json:"action,omitempty"`
+
+	// key — the named key for action: key (Return, Escape, F5, ...).
+	KeyName string `json:"key,omitempty"`
+
+	// combo — the chord for action: key-combo (ctrl+c, ctrl+alt+Delete, ...).
+	Combo string `json:"combo,omitempty"`
+
+	// text — the text for action: type.
+	Text string `json:"text,omitempty"`
+
+	// timeout_sec — how long to wait for `wait_for` before failing (default 120).
+	TimeoutSec int `json:"timeout_sec,omitempty"`
+
+	// optional — when true, a wait that times out (the anchor never appears)
+	// SKIPS the step instead of failing the drive, and its action is not sent.
+	// Use it for a screen that is only sometimes present (a keyboard picker on a
+	// machine that already recorded one, an install-mode picker only offered when
+	// free space exists) — so one recipe serves both shapes.
+	Optional bool `json:"optional,omitempty"`
+
+	// artifact — optional host path to save the frame captured for this step.
+	Artifact string `json:"artifact,omitempty"`
+
+	// description — optional human label for the step's evidence line.
+	Description string `json:"description,omitempty"`
+}
+
+// #JetkvmDeviceInput — the authored `kind: jetkvm` DEVICE entity body. It is
+// the plugin's configurable surface: the device address + credentials, and an
+// optional installer recipe + answers. Consumed by the plugin's OpLoad (to
+// store the typed entity) and used by `charly jetkvm install <entity>` and by
+// a local/VM deploy that names it.
+type JetkvmDeviceInput struct {
+	// host — the device address. Omit to fall back to JETKVM_HOST at runtime.
+	Host string `json:"host,omitempty"`
+
+	// insecure — permit the device's self-signed TLS certificate.
+	Insecure bool `json:"insecure,omitempty"`
+
+	// password_secret — credential-store key holding the device password.
+	PasswordSecret string `json:"password_secret,omitempty"`
+
+	// description — human label for the device.
+	Description string `json:"description,omitempty"`
+
+	// installer — the console-installer recipe + answers for this device.
+	Installer *JetkvmInstaller `json:"installer,omitempty"`
+}
+
+// #JetkvmInstaller — the installer/wizard configuration for a `kind: jetkvm`
+// device. One device can carry SEVERAL named recipes (an OS installer AND the
+// post-reboot first-boot provisioning wizard are two), each a named `steps:`
+// list under `recipes:`.
+type JetkvmInstaller struct {
+	// recipes — name → ordered recipe. The conventional names are `install`
+	// (the OS installer, the default) and `first_boot` (the post-reboot owner
+	// provisioning wizard), but any name works: a step selects one with
+	// `recipe:`.
+	Recipes map[string][]JetkvmInstallStep `json:"recipes,omitempty"`
+
+	// steps — a SHORTCUT for recipes.install, so a single-recipe device needs no
+	// nesting. If both are set, `recipes.install` wins.
+	Steps []JetkvmInstallStep `json:"steps,omitempty"`
+
+	// answers — a name → value map the install driver substitutes into step
+	// `text` fields via `{{name}}` placeholders.
+	Answers map[string]string `json:"answers,omitempty"`
+
+	// answer_secrets — a name → credential-store key map, resolved at run time
+	// and merged into answers. Use for secrets so nothing plaintext is committed.
+	AnswerSecrets map[string]string `json:"answer_secrets,omitempty"`
+
+	// answers_env — a name → environment-variable-name map, resolved at run time
+	// and merged into answers (lowest precedence). The environment-configurable
+	// path: nothing machine-specific is committed.
+	AnswersEnv map[string]string `json:"answers_env,omitempty"`
 }
