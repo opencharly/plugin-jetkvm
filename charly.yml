@@ -347,51 +347,6 @@ jetkvm-ocr-host:
 # check-omarchy-jetkvm-install bed in distro-omarchy), never CI.
 #
 #   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
-#     charly check run jetkvm-install-probe
-jetkvm-install-probe:
-    local:
-        from: jetkvm-install-host
-        host: local
-        disposable: true
-        plan:
-            - check: the install driver walks the first wizard screens on ONE session (greeter to keyboard), then stops before any disk step
-              id: jk-install-probe
-              jetkvm:
-                  method: install
-                  allow_control: true
-                  steps:
-                      - wait_for: Press Return to Start Install
-                        action: key
-                        key: Return
-                        description: accept the greeter
-                      - wait_for: Select keyboard layout
-                        action: key
-                        key: Return
-                        description: accept the keyboard layout
-                # NOTE: the recipe deliberately stops here. Reaching the disk
-                # step would overwrite a machine; this bed proves the DRIVER.
-              stdout:
-                  - contains: "step 2"
-              context: [runtime]
-              eventually: 180s
-              retry_interval: 5s
-jetkvm-install-host:
-    local:
-        description: minimal kind:local template for the install-driver probe bed
-        candy: []
-
-# ── The ENTITY-REFERENCE bed (read-only in effect) ───────────────────────────
-# Proves the `kind: jetkvm` entity path LIVE: a step that names `device:` makes
-# the provider resolve the entity over the reverse channel (resolveDeviceEntity /
-# applyDeviceEntity), and an `install` step with `recipe:` walks its named recipe
-# through the shared engine. The recipe here is DELIBERATELY non-destructive:
-# its single step WAITS for an anchor that is on the CURRENT screen and sends NO
-# input (a pure OCR-wait), so the driver runs end to end without touching the
-# machine. The full install bed (check-omarchy-jetkvm-install in distro-omarchy)
-# is the destructive sibling.
-#
-#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
-#     charly check run jetkvm-entity-probe
 jetkvm-entity:
     jetkvm:
         description: >-
