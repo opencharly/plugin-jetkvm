@@ -70,20 +70,7 @@ func runInstall(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *para
 	if !hasSteps(in) {
 		return "", fmt.Errorf("jetkvm: install requires a steps recipe (author `steps:` inline, or reference a `kind: jetkvm` entity recipe with `device:`/`recipe:`)")
 	}
-	steps := make([]kit.ConsoleStep, 0, len(in.Steps))
-	for _, s := range in.Steps {
-		steps = append(steps, kit.ConsoleStep{
-			WaitFor:     s.WaitFor,
-			Action:      s.Action,
-			Key:         s.KeyName,
-			Combo:       s.Combo,
-			Text:        s.Text,
-			TimeoutSec:  s.TimeoutSec,
-			Optional:    s.Optional,
-			Artifact:    s.Artifact,
-			Description: s.Description,
-		})
-	}
+	steps := paramsStepsToKit(in.Steps)
 	w := &kit.ConsoleWizard{
 		Steps:     steps,
 		Answers:   in.Answers,

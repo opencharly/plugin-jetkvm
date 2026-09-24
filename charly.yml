@@ -370,3 +370,58 @@ jetkvm-install-host:
         description: minimal kind:local template for the install-driver probe bed
         candy: []
 
+# ── The ENTITY-REFERENCE bed (read-only in effect) ───────────────────────────
+# Proves the `kind: jetkvm` entity path LIVE: a step that names `device:` makes
+# the provider resolve the entity over the reverse channel (resolveDeviceEntity /
+# applyDeviceEntity), and an `install` step with `recipe:` walks its named recipe
+# through the shared engine. The recipe here is DELIBERATELY non-destructive:
+# its single step WAITS for an anchor that is on the CURRENT screen and sends NO
+# input (a pure OCR-wait), so the driver runs end to end without touching the
+# machine. The full install bed (check-omarchy-jetkvm-install in distro-omarchy)
+# is the destructive sibling.
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> #     charly check run jetkvm-entity-probe
+jetkvm-entity:
+    jetkvm:
+        description: >-
+            Minimal console-recipe entity for the entity-resolution bed. Its
+            recipe waits for the Omarchy wordmark (present on the installer AND
+            the installed desktop) and sends no input, so the entity path and the
+            install driver are provable without wiping a machine.
+        installer:
+            recipes:
+                probe:
+                    - wait_for: omarch
+                      description: wait for the Omarchy wordmark (no action — a pure OCR-wait)
+jetkvm-entity-probe:
+    local:
+        from: jetkvm-entity-host
+        host: local
+        disposable: true
+        plan:
+            - check: "a step naming a `kind: jetkvm` entity resolves it over the reverse channel and reads the device (the live entity-resolution path)"
+              id: jke-status
+              jetkvm:
+                  method: status
+                  device: jetkvm-entity
+              stdout:
+                  - contains: "rpc:       true"
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: "an install step with `device:`+`recipe:` walks the entity's named recipe through the shared engine (one OCR-wait, no input — non-destructive)"
+              id: jke-install
+              jetkvm:
+                  method: install
+                  device: jetkvm-entity
+                  recipe: probe
+                  allow_control: true
+              stdout:
+                  - contains: "step 1"
+              context: [runtime]
+              eventually: 120s
+              retry_interval: 5s
+jetkvm-entity-host:
+    local:
+        description: minimal kind:local template for the entity-resolution bed
+        candy: []

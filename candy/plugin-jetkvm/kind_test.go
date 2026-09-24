@@ -130,7 +130,7 @@ func TestEntityMergePrecedence(t *testing.T) {
 // TestEntityDefaultsFillWhenAuthoredEmpty pins the other half: an entity SUPPLIES
 // what the step leaves empty (the real function, not a re-implementation).
 func TestEntityDefaultsFillWhenAuthoredEmpty(t *testing.T) {
-	in := &params.JetkvmInput{Device: "omarchy-kvm"}
+	in := &params.JetkvmInput{Device: "omarchy-kvm", Method: "install"}
 	dev := &params.JetkvmDeviceInput{
 		Host:      "entity-host",
 		Insecure:  true,
@@ -141,6 +141,24 @@ func TestEntityDefaultsFillWhenAuthoredEmpty(t *testing.T) {
 	}
 	if in.Host != "entity-host" || !in.Insecure || len(in.Steps) != 1 || in.Steps[0].WaitFor != "entity" {
 		t.Fatalf("entity defaults did not fill the empty step: %+v", in)
+	}
+}
+
+// TestEntityReadOnlyMethodSkipsRecipe pins that a read-only method naming a
+// device takes only the CONNECTION defaults — it must not try to select the
+// installer recipe (which would fail on an entity whose recipes are not named
+// "install"/"first_boot").
+func TestEntityReadOnlyMethodSkipsRecipe(t *testing.T) {
+	in := &params.JetkvmInput{Device: "jetkvm-entity", Method: "status"}
+	dev := &params.JetkvmDeviceInput{
+		Host:      "entity-host",
+		Installer: &params.JetkvmInstaller{Recipes: map[string][]params.JetkvmInstallStep{"probe": {{WaitFor: "x"}}}},
+	}
+	if err := applyDeviceDefaults(in, dev, nil, nil); err != nil {
+		t.Fatalf("a read-only method must not select a recipe: %v", err)
+	}
+	if in.Host != "entity-host" || len(in.Steps) != 0 {
+		t.Fatalf("read-only method must take only connection defaults: %+v", in)
 	}
 }
 

@@ -117,7 +117,11 @@ func applyDeviceEntity(ctx context.Context, ex *sdk.Executor, brokerID uint32, i
 // (credential store), then authored `answers`; a step's OWN `answers` win over
 // all three.
 func applyDeviceDefaults(in *params.JetkvmInput, dev *params.JetkvmDeviceInput, envLookup, secretLookup func(string) string) error {
-	if dev.Installer != nil {
+	// The installer recipe + answers belong to the `install` method. A read-only
+	// method (status/screenshot/ocr/...) that names `device:` wants only the
+	// connection defaults, so selecting a recipe for it would fail on an entity
+	// whose recipes are named something other than the default.
+	if dev.Installer != nil && in.Method == params.JetkvmMethod("install") {
 		if len(in.Steps) == 0 {
 			recipeName := in.Recipe
 			if recipeName == "" {
