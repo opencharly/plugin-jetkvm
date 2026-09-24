@@ -313,6 +313,16 @@ jetkvm-ocr-readonly:
               context: [runtime]
               eventually: 60s
               retry_interval: 5s
+            - check: a screenshot with artifact_contains_text proves the OCR validator reads the PULLED PNG (the wait-for-screen primitive in screenshot form)
+              id: jk-artifact-text
+              jetkvm:
+                  method: screenshot
+                  artifact: /tmp/jetkvm-ocr-artifact.png
+                  artifact_min_bytes: 20000
+                  artifact_contains_text: omarch
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
             - check: a NEGATIVE ocr assertion fails loudly (proving the method reads pixels, not passing vacuously) — asserted by requiring exit 1 and the not-found message
               id: jk-ocr-negative
               jetkvm:
@@ -380,7 +390,8 @@ jetkvm-install-host:
 # machine. The full install bed (check-omarchy-jetkvm-install in distro-omarchy)
 # is the destructive sibling.
 #
-#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> #     charly check run jetkvm-entity-probe
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-entity-probe
 jetkvm-entity:
     jetkvm:
         description: >-
@@ -419,6 +430,21 @@ jetkvm-entity-probe:
                   device: jetkvm-entity
                   recipe: probe
                   allow_control: true
+              stdout:
+                  - contains: "step 1"
+              context: [runtime]
+              eventually: 120s
+              retry_interval: 5s
+            - check: "an install step with an INLINE `steps:` recipe (no `device:`) walks that recipe through the shared engine — the inline branch of runInstall (OCR-wait then F6 — non-destructive)"
+              id: jke-inline
+              jetkvm:
+                  method: install
+                  allow_control: true
+                  steps:
+                      - wait_for: omarch
+                        action: key
+                        key: F6
+                        description: wait for the Omarchy wordmark, then press F6
               stdout:
                   - contains: "step 1"
               context: [runtime]
