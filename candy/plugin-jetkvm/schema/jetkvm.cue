@@ -174,16 +174,19 @@
 	phase?: string @go(Phase)
 
 	// artifact_min_bytes / artifact_min_dimensions / artifact_not_uniform /
-	// artifact_min_cast_events / artifact_contains_text — the post-run
-	// artifact-reality assertions (sdk.RunArtifactValidators). artifact_contains_text
-	// is the OCR wait-for-screen primitive in `screenshot` form: it runs
-	// tesseract on the HOST over the pulled PNG and asserts the text is present,
-	// so a `screenshot` step can gate on what the screen actually shows.
-	artifact_min_bytes?:       int & >=0                    @go(ArtifactMinBytes,type=int)
-	artifact_min_dimensions?:  string & =~"^[0-9]+x[0-9]+$" @go(ArtifactMinDimensions)
-	artifact_not_uniform?:     bool                         @go(ArtifactNotUniform)
-	artifact_min_cast_events?: int & >=0                    @go(ArtifactMinCastEvents,type=int)
-	artifact_contains_text?:   string                       @go(ArtifactContainsText)
+	// artifact_contains_text — the post-run artifact-reality assertions
+	// (sdk.RunArtifactValidators) THIS verb can produce. artifact_contains_text is
+	// the OCR wait-for-screen primitive in `screenshot` form: it runs tesseract on
+	// the HOST over the pulled PNG and asserts the text is present, so a
+	// `screenshot` step can gate on what the screen actually shows.
+	//
+	// artifact_min_cast_events is deliberately NOT here: it validates an asciinema
+	// `.cast` file, and the jetkvm verb produces only PNGs — the field would be
+	// dead surface, so it is omitted rather than shipped unexercised.
+	artifact_min_bytes?:      int & >=0                    @go(ArtifactMinBytes,type=int)
+	artifact_min_dimensions?: string & =~"^[0-9]+x[0-9]+$" @go(ArtifactMinDimensions)
+	artifact_not_uniform?:    bool                         @go(ArtifactNotUniform)
+	artifact_contains_text?:  string                       @go(ArtifactContainsText)
 }
 
 // #JetkvmInstallStep — ONE step of a console-installer recipe driven by the

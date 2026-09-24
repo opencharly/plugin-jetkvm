@@ -54,7 +54,7 @@ plumbing is charly's own SDK surface, never a second implementation.
 
 ## Methods
 
-Read-only: `status`, `screenshot`, `version`, `video-state`, `usb-state`,
+Read-only: `status`, `screenshot`, `ocr`, `version`, `video-state`, `usb-state`,
 `atx-state`, `dc-state`, `virtual-media-state`, `storage-files`, `wol-devices`,
 `macros`, `keyboard-layout`, `timezones`, `cloud-state`, `network-state`,
 `network-settings`, `tailscale-status`, `update-status`, `devmode-state`,
@@ -62,7 +62,7 @@ Read-only: `status`, `screenshot`, `version`, `video-state`, `usb-state`,
 `check-media-url`, `usb-config`.
 
 Mutating (need `allow_control: true`): `key`, `type`, `key-combo`, `macro`,
-`click`, `mouse`, `move`, `scroll`, `drag`, `power`, `dc-power`, `reboot`, `wol`,
+`click`, `mouse`, `move`, `scroll`, `drag`, `install`, `power`, `dc-power`, `reboot`, `wol`,
 `wake-host`, `virtual-media`, `usb-device`, `usb-emulation`, `set-settings`,
 `set-edid`,
 `set-video`, `set-display`, `set-audio`, `set-network`, `set-tailscale`,

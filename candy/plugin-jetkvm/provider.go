@@ -88,20 +88,16 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 		}
 	}
 
-	// Resolve secrets named on the step itself (independent of any device entity),
-	// so an inline recipe can keep a password out of charly.yml. Explicit
-	// `answers` still win over a resolved secret.
-	if len(in.AnswerSecrets) > 0 {
-		merged := map[string]string{}
-		for name, key := range in.AnswerSecrets {
-			if v := credentialLookup(ctx, req.GetExecutorBrokerId(), key); v != "" {
-				merged[name] = v
-			}
-		}
-		for name, v := range in.Answers {
-			merged[name] = v
-		}
-		in.Answers = merged
+	// Resolve the step's own answer sources (independent of any device entity),
+	// so an inline recipe can be env-configured AND keep a password out of
+	// charly.yml. The SAME three-source merge the entity path uses (R3):
+	// answers_env (host environment) < answer_secrets (credential store) <
+	// authored answers. One kit.MergeAnswers call, never a hand-rolled loop.
+	if len(in.AnswersEnv) > 0 || len(in.AnswerSecrets) > 0 {
+		in.Answers = kit.MergeAnswers(in.AnswersEnv, in.AnswerSecrets, in.Answers,
+			os.Getenv, func(key string) string {
+				return credentialLookup(ctx, req.GetExecutorBrokerId(), key)
+			})
 	}
 
 	// Resolve the device address: the authored host first, then the
