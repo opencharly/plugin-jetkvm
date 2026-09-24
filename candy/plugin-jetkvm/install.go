@@ -83,11 +83,21 @@ func runInstall(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *para
 	if !hasSteps(in) {
 		return "", fmt.Errorf("jetkvm: install requires a steps recipe (author `steps:` inline, or reference a `kind: jetkvm` entity recipe with `device:`/`recipe:`)")
 	}
-	steps := paramsStepsToKit(in.Steps)
+	return runInstallWith(ctx, paramsStepsToKit(in.Steps), in.Answers, jetkvmTransport{cl: cl, op: op}, nil)
+}
+
+// runInstallWith is runInstall over an injected transport and OCR. Production
+// passes the real jetkvmTransport and a nil OCR (the engine's default OCRBytes);
+// a test passes a scripted transport and an OCR over the scripted bytes, so the
+// ENGINE WIRING and the per-step anchor gating are exercised deterministically
+// with no device. Only the two boundaries a scripted screen forces are
+// substituted.
+func runInstallWith(ctx context.Context, steps []kit.ConsoleStep, answers map[string]string, tr kit.ConsoleTransport, ocr func([]byte) (string, error)) (string, error) {
 	w := &kit.ConsoleWizard{
 		Steps:     steps,
-		Answers:   in.Answers,
-		Transport: jetkvmTransport{cl: cl, op: op},
+		Answers:   answers,
+		Transport: tr,
+		OCR:       ocr,
 	}
 	return w.Run(ctx)
 }

@@ -6,7 +6,10 @@ package jetkvm
 // lives — sdk/kit/console_test.go — so it is not duplicated here (R3).
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/opencharly/plugin-jetkvm/candy/plugin-jetkvm/params"
 	"github.com/opencharly/sdk/kit"
@@ -50,5 +53,77 @@ func TestKeyInput(t *testing.T) {
 	ty := typeInput("hello")
 	if ty.Method != "type" || ty.Text != "hello" || !ty.AllowControl {
 		t.Fatalf("type input wrong: %+v", ty)
+	}
+}
+
+// scriptedTransport replays a sequence of screens (advancing on each Capture)
+// and records the input it receives — a deterministic stand-in for the device.
+type scriptedTransport struct {
+	screens []string
+	idx     int
+	keys    []string
+	types   []string
+}
+
+func (s *scriptedTransport) Capture(context.Context) ([]byte, error) {
+	scr := s.screens[s.idx]
+	if s.idx < len(s.screens)-1 {
+		s.idx++
+	}
+	return []byte(scr), nil
+}
+func (s *scriptedTransport) PressKey(_ context.Context, k string) error {
+	s.keys = append(s.keys, k)
+	return nil
+}
+func (s *scriptedTransport) PressCombo(_ context.Context, c string) error {
+	s.keys = append(s.keys, "combo:"+c)
+	return nil
+}
+func (s *scriptedTransport) Type(_ context.Context, t string) error {
+	s.types = append(s.types, t)
+	return nil
+}
+
+// TestInstall_MultiStepDistinctAnchors is the DETERMINISTIC proof of the
+// headline behaviour the live single-screen bed cannot show: the engine walks an
+// ORDERED multi-step recipe, and each step waits for its OWN distinct anchor
+// (so step 2 does NOT proceed on step 1's screen). The transport replays
+// screen1 -> screen2, and OCR is identity over the screen bytes.
+func TestInstall_MultiStepDistinctAnchors(t *testing.T) {
+	tr := &scriptedTransport{screens: []string{
+		"screen-one: Press Return to Start Install",
+		"screen-two: Select keyboard layout",
+	}}
+	steps := []kit.ConsoleStep{
+		{WaitFor: "Press Return to Start Install", Action: "key", Key: "Return"},
+		{WaitFor: "Select keyboard layout", Action: "key", Key: "F5"},
+	}
+	idOCR := func(b []byte) (string, error) { return string(b), nil }
+	out, err := runInstallWith(context.Background(), steps, nil, tr, idOCR)
+	if err != nil {
+		t.Fatalf("runInstallWith: %v", err)
+	}
+	if !strings.Contains(out, "step 2") {
+		t.Fatalf("both steps must run, got %q", out)
+	}
+	// The key order proves the SECOND step only fired after the SECOND screen:
+	// if step 2's anchor were missing, the engine would not have reached it.
+	if len(tr.keys) != 2 || tr.keys[0] != "Return" || tr.keys[1] != "F5" {
+		t.Fatalf("per-step input order wrong: %+v", tr.keys)
+	}
+}
+
+// TestInstall_DesyncIsCaught pins the ANTI-vacuity property: a step whose anchor
+// never appears on the replayed screens must FAIL (the engine must not sail
+// through on a stale screen). Here the first anchor is absent entirely.
+func TestInstall_DesyncIsCaught(t *testing.T) {
+	tr := &scriptedTransport{screens: []string{"only-screen"}}
+	steps := []kit.ConsoleStep{{WaitFor: "never-on-any-screen", Action: "key", Key: "Return"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	idOCR := func(b []byte) (string, error) { return string(b), nil }
+	if _, err := runInstallWith(ctx, steps, nil, tr, idOCR); err == nil {
+		t.Fatal("a step whose anchor never appears must fail (not pass vacuously)")
 	}
 }

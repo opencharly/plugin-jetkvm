@@ -67,7 +67,11 @@ plugin-jetkvm:
             - check: "the verb and kind capabilities are declared together, so a jetkvm step dispatches AND a kind jetkvm entity is recognized at parse (a probe that fails if either declaration is dropped)"
               id: jetkvm-capabilities-declared
               command:
-                command: 'grep -q "verb:jetkvm" candy/plugin-jetkvm/charly.yml && grep -q "kind:jetkvm" candy/plugin-jetkvm/charly.yml'
+                # Anchored to the DECLARATION lines (leading spaces + "- verb:jetkvm"
+                # at end of line), NOT a bare substring: the check's own command text
+                # contains the substrings, so an unanchored grep would match itself and
+                # stay green even if the declaration were deleted.
+                command: 'grep -qE "^[[:space:]]+-[[:space:]]*verb:jetkvm[[:space:]]*$" candy/plugin-jetkvm/charly.yml && grep -qE "^[[:space:]]+-[[:space:]]*kind:jetkvm[[:space:]]*$" candy/plugin-jetkvm/charly.yml'
                 in_container: false
               context:
                 - runtime
