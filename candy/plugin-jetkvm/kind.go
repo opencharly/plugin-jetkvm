@@ -31,31 +31,7 @@ import (
 // kindWord is the `kind:` discriminator this plugin serves.
 const kindWord = "jetkvm"
 
-// deviceEntity is the typed decode of a `kind: jetkvm` entity body — the
-// authored device + recipe configuration. The recipe fields are plain Go data
-// passed to the shared sdk/kit console engine (SelectRecipe / MergeAnswers); the
-// kit holds no wire type, because the AUTHORED shape is this plugin's own
-// CUE-sourced schema (SDD).
-type deviceEntity struct {
-	Host           string           `json:"host,omitempty"`
-	Insecure       bool             `json:"insecure,omitempty"`
-	PasswordSecret string           `json:"password_secret,omitempty"`
-	Description    string           `json:"description,omitempty"`
-	Installer      *installerRecipe `json:"installer,omitempty"`
-}
-
-// installerRecipe is the CONSOLE-RECIPE bundle the entity carries, decoded from
-// its CUE-sourced #JetkvmInstaller. Its fields are plain Go data passed to the
-// shared sdk/kit engine's SelectRecipe / MergeAnswers (no wire type lives in the
-// kit — the authored shape is the plugin's own CUE schema, SDD).
-type installerRecipe struct {
-	Recipes       map[string][]params.JetkvmInstallStep `json:"recipes,omitempty"`
-	Steps         []params.JetkvmInstallStep            `json:"steps,omitempty"`
-	Answers       map[string]string                     `json:"answers,omitempty"`
-	AnswerSecrets map[string]string                     `json:"answer_secrets,omitempty"`
-	AnswersEnv    map[string]string                     `json:"answers_env,omitempty"`
-}
-
+// params.JetkvmDeviceInput is the typed decode of a `kind: jetkvm` entity body — the
 // defaultRecipeName is the recipe a step drives when it authors no `recipe:`.
 const defaultRecipeName = "install"
 
@@ -82,7 +58,7 @@ func projectDir(ctx context.Context, ex *sdk.Executor, name string) (string, err
 // resolveDeviceEntity loads the project out-of-process and returns the decoded
 // `kind: jetkvm` entity named name. An absent entity is a clear error, never a
 // silent zero value.
-func resolveDeviceEntity(ctx context.Context, ex *sdk.Executor, name string) (*deviceEntity, error) {
+func resolveDeviceEntity(ctx context.Context, ex *sdk.Executor, name string) (*params.JetkvmDeviceInput, error) {
 	if ex == nil {
 		return nil, fmt.Errorf("jetkvm: resolving device entity %q needs a host reverse channel (run it inside a deploy/check step, not a bare command)", name)
 	}
@@ -101,7 +77,7 @@ func resolveDeviceEntity(ctx context.Context, ex *sdk.Executor, name string) (*d
 	if !found {
 		return nil, fmt.Errorf("jetkvm: no kind:jetkvm entity named %q in %s", name, dir)
 	}
-	var dev deviceEntity
+	var dev params.JetkvmDeviceInput
 	if err := json.Unmarshal(body, &dev); err != nil {
 		return nil, fmt.Errorf("jetkvm: decoding kind:jetkvm entity %q: %w", name, err)
 	}
@@ -126,6 +102,21 @@ func applyDeviceEntity(ctx context.Context, ex *sdk.Executor, brokerID uint32, i
 	if err != nil {
 		return err
 	}
+	return applyDeviceDefaults(in, dev, os.Getenv, func(key string) string {
+		return credentialLookup(ctx, brokerID, key)
+	})
+}
+
+// applyDeviceDefaults merges an entity's defaults into `in`, with authored step
+// fields WINNING. It is PURE (the loaders are injected), so the precedence
+// contract is unit-testable without a reverse channel — the test calls THIS
+// function, not a re-implementation of it, so it fails if the real logic drifts.
+//
+// Answers come from THREE sources merged lowest-to-highest by the shared
+// kit.MergeAnswers: `answers_env` (host environment), `answer_secrets`
+// (credential store), then authored `answers`; a step's OWN `answers` win over
+// all three.
+func applyDeviceDefaults(in *params.JetkvmInput, dev *params.JetkvmDeviceInput, envLookup, secretLookup func(string) string) error {
 	if dev.Installer != nil {
 		if len(in.Steps) == 0 {
 			recipeName := in.Recipe
@@ -138,11 +129,7 @@ func applyDeviceEntity(ctx context.Context, ex *sdk.Executor, brokerID uint32, i
 			}
 			in.Steps = consoleStepsToParams(steps)
 		}
-		// Entity-level answers, then the step's authored answers win.
-		merged := kit.MergeAnswers(dev.Installer.AnswersEnv, dev.Installer.AnswerSecrets, dev.Installer.Answers,
-			os.Getenv, func(key string) string {
-				return credentialLookup(ctx, brokerID, key)
-			})
+		merged := kit.MergeAnswers(dev.Installer.AnswersEnv, dev.Installer.AnswerSecrets, dev.Installer.Answers, envLookup, secretLookup)
 		for name, v := range in.Answers {
 			merged[name] = v
 		}
@@ -150,9 +137,8 @@ func applyDeviceEntity(ctx context.Context, ex *sdk.Executor, brokerID uint32, i
 			in.Answers = merged
 		}
 	}
-	// Device connection fields are also entity-supplied defaults: an authored
-	// step field wins, so a bed can point at a device by entity and still
-	// override the host.
+	// Device connection fields are entity-supplied defaults: an authored step
+	// field wins, so a bed can point at a device by entity and still override.
 	if in.Host == "" {
 		in.Host = dev.Host
 	}
@@ -227,7 +213,7 @@ func kindCapability() sdk.ProvidedCapability {
 // entity against #JetkvmDeviceInput, then this re-marshals it canonically so it
 // lands in uf.PluginKinds["jetkvm"][name].
 func deviceCanonicalJSON(paramsJSON []byte) (json.RawMessage, error) {
-	var dev deviceEntity
+	var dev params.JetkvmDeviceInput
 	if len(paramsJSON) > 0 {
 		if err := json.Unmarshal(paramsJSON, &dev); err != nil {
 			return nil, fmt.Errorf("jetkvm: decode device entity: %w", err)

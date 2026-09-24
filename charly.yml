@@ -305,11 +305,11 @@ jetkvm-ocr-readonly:
         host: local
         disposable: true
         plan:
-            - check: the ocr method reads the live screen and finds the Omarchy greeter text
+            - check: the ocr method reads the live screen and finds on-screen text (the Omarchy wordmark, present on both the installer and the installed desktop — this bed proves the read, not a wizard transition; the screen-unique anchor rule belongs to recipe steps, not here)
               id: jk-ocr-positive
               jetkvm:
                   method: ocr
-                  text: Press Return to Start Install
+                  text: omarch
               context: [runtime]
               eventually: 60s
               retry_interval: 5s

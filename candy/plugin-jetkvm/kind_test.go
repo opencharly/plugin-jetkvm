@@ -30,7 +30,7 @@ func TestOpLoadCanonicalizesDeviceEntity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpLoad transport error: %v", err)
 	}
-	var dev deviceEntity
+	var dev params.JetkvmDeviceInput
 	if err := json.Unmarshal([]byte(reply.GetResultJson()), &dev); err != nil {
 		t.Fatalf("decode canonical reply %q: %v", reply.GetResultJson(), err)
 	}
@@ -111,22 +111,36 @@ func TestEntityMergePrecedence(t *testing.T) {
 		Host:  "authored-host",
 		Steps: []params.JetkvmInstallStep{{WaitFor: "authored"}},
 	}
-	dev := &deviceEntity{
+	dev := &params.JetkvmDeviceInput{
 		Host:      "entity-host",
-		Installer: &installerRecipe{Steps: []params.JetkvmInstallStep{{WaitFor: "entity"}}},
+		Installer: &params.JetkvmInstaller{Steps: []params.JetkvmInstallStep{{WaitFor: "entity"}}},
 	}
-	// Replicate the merge's precedence without the channel: authored wins.
-	if in.Host == "" {
-		in.Host = dev.Host
-	}
-	if len(in.Steps) == 0 {
-		in.Steps = dev.Installer.Steps
+	// Call the REAL merge so this fails if the precedence logic drifts.
+	if err := applyDeviceDefaults(in, dev, nil, nil); err != nil {
+		t.Fatalf("applyDeviceDefaults: %v", err)
 	}
 	if in.Host != "authored-host" {
 		t.Fatalf("authored host must win, got %q", in.Host)
 	}
 	if in.Steps[0].WaitFor != "authored" {
 		t.Fatalf("authored steps must win, got %q", in.Steps[0].WaitFor)
+	}
+}
+
+// TestEntityDefaultsFillWhenAuthoredEmpty pins the other half: an entity SUPPLIES
+// what the step leaves empty (the real function, not a re-implementation).
+func TestEntityDefaultsFillWhenAuthoredEmpty(t *testing.T) {
+	in := &params.JetkvmInput{Device: "omarchy-kvm"}
+	dev := &params.JetkvmDeviceInput{
+		Host:      "entity-host",
+		Insecure:  true,
+		Installer: &params.JetkvmInstaller{Steps: []params.JetkvmInstallStep{{WaitFor: "entity"}}},
+	}
+	if err := applyDeviceDefaults(in, dev, nil, nil); err != nil {
+		t.Fatalf("applyDeviceDefaults: %v", err)
+	}
+	if in.Host != "entity-host" || !in.Insecure || len(in.Steps) != 1 || in.Steps[0].WaitFor != "entity" {
+		t.Fatalf("entity defaults did not fill the empty step: %+v", in)
 	}
 }
 
