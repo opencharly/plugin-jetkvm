@@ -407,6 +407,10 @@ jetkvm-entity:
                       action: key
                       key: F5
                       description: wait for the Omarchy wordmark, then press F5 (a harmless function key that exercises the transport's PressKey live)
+                    - wait_for: omarch
+                      action: key
+                      key: F6
+                      description: a SECOND ordered step, so the bed proves the engine walks a MULTI-step recipe (step 2 reached)
 jetkvm-entity-probe:
     local:
         from: jetkvm-entity-host
@@ -431,7 +435,7 @@ jetkvm-entity-probe:
                   recipe: probe
                   allow_control: true
               stdout:
-                  - contains: "step 1"
+                  - contains: "step 2"
               context: [runtime]
               eventually: 120s
               retry_interval: 5s

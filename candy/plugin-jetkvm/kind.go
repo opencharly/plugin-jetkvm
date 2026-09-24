@@ -31,7 +31,6 @@ import (
 // kindWord is the `kind:` discriminator this plugin serves.
 const kindWord = "jetkvm"
 
-// params.JetkvmDeviceInput is the typed decode of a `kind: jetkvm` entity body — the
 // defaultRecipeName is the recipe a step drives when it authors no `recipe:`.
 const defaultRecipeName = "install"
 
