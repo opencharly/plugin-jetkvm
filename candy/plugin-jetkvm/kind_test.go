@@ -107,9 +107,13 @@ func TestWakeHostIsMutating(t *testing.T) {
 // overrides the entity-supplied default. Tested via the pure merge shape
 // (applyDeviceEntity's network half needs the reverse channel).
 func TestEntityMergePrecedence(t *testing.T) {
+	// Method MUST be "install": applyDeviceDefaults only consults the entity
+	// recipe for the install method, so without it the entity branch is skipped
+	// and the "authored wins" assertion would pass vacuously.
 	in := &params.JetkvmInput{
-		Host:  "authored-host",
-		Steps: []params.JetkvmInstallStep{{WaitFor: "authored"}},
+		Method: "install",
+		Host:   "authored-host",
+		Steps:  []params.JetkvmInstallStep{{WaitFor: "authored"}},
 	}
 	dev := &params.JetkvmDeviceInput{
 		Host:      "entity-host",
@@ -122,8 +126,28 @@ func TestEntityMergePrecedence(t *testing.T) {
 	if in.Host != "authored-host" {
 		t.Fatalf("authored host must win, got %q", in.Host)
 	}
-	if in.Steps[0].WaitFor != "authored" {
-		t.Fatalf("authored steps must win, got %q", in.Steps[0].WaitFor)
+	if len(in.Steps) != 1 || in.Steps[0].WaitFor != "authored" {
+		t.Fatalf("authored steps must win over the entity recipe, got %+v", in.Steps)
+	}
+}
+
+// TestEntityRecipeFillsEmptySteps is the OTHER half, WITH the install method:
+// when the step authors no steps, the ENTITY recipe is selected and used — so
+// this fails if the entity branch is skipped or the wrong recipe is chosen.
+func TestEntityRecipeFillsEmptySteps(t *testing.T) {
+	in := &params.JetkvmInput{Method: "install", Device: "dev"}
+	dev := &params.JetkvmDeviceInput{
+		Installer: &params.JetkvmInstaller{
+			Recipes: map[string][]params.JetkvmInstallStep{
+				"install": {{WaitFor: "from-entity-recipe"}},
+			},
+		},
+	}
+	if err := applyDeviceDefaults(in, dev, nil, nil); err != nil {
+		t.Fatalf("applyDeviceDefaults: %v", err)
+	}
+	if len(in.Steps) != 1 || in.Steps[0].WaitFor != "from-entity-recipe" {
+		t.Fatalf("entity recipe must fill empty steps, got %+v", in.Steps)
 	}
 }
 

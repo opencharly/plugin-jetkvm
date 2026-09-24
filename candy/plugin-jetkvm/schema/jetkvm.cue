@@ -191,11 +191,17 @@
 
 // #JetkvmInstallStep — ONE step of a console-installer recipe driven by the
 // `install` method. Each step OCR-waits for its `wait_for` anchor to appear on
-// the screen, then performs ONE input action. `wait_for` MUST be a
-// screen-UNIQUE string: a string present on every screen (e.g. a logo) passes
-// vacuously and desynchronises the whole drive.
+// the screen, then performs ONE input action.
+//
+// A REAL WIZARD recipe MUST use a screen-UNIQUE anchor per step: a string present
+// on every screen (e.g. a logo) passes vacuously and desynchronises the whole
+// drive. A single-step PROBE recipe whose only job is to prove the OCR read and
+// the transport's input may deliberately use a broad anchor — there is no next
+// step to desynchronise against — and the entity bed's `probe` recipe is exactly
+// that.
 #JetkvmInstallStep: {
-	// wait_for — screen-unique text the step waits for before acting.
+	// wait_for — the text the step waits for before acting. Screen-unique for a
+	// multi-step wizard recipe; a single-step probe may use a broad anchor.
 	wait_for: string & !="" @go(WaitFor)
 	// action — the input to send once `wait_for` is on screen. Omitted means the
 	// step only waits (a pure synchronisation/observation step).
