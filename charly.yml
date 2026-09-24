@@ -386,13 +386,16 @@ jetkvm-entity:
         description: >-
             Minimal console-recipe entity for the entity-resolution bed. Its
             recipe waits for the Omarchy wordmark (present on the installer AND
-            the installed desktop) and sends no input, so the entity path and the
-            install driver are provable without wiping a machine.
+            the installed desktop) then presses F5 (a harmless function key), so
+            the entity path, the install driver AND the transport's PressKey are
+            provable live without wiping a machine.
         installer:
             recipes:
                 probe:
                     - wait_for: omarch
-                      description: wait for the Omarchy wordmark (no action — a pure OCR-wait)
+                      action: key
+                      key: F5
+                      description: wait for the Omarchy wordmark, then press F5 (a harmless function key that exercises the transport's PressKey live)
 jetkvm-entity-probe:
     local:
         from: jetkvm-entity-host
@@ -409,7 +412,7 @@ jetkvm-entity-probe:
               context: [runtime]
               eventually: 60s
               retry_interval: 5s
-            - check: "an install step with `device:`+`recipe:` walks the entity's named recipe through the shared engine (one OCR-wait, no input — non-destructive)"
+            - check: "an install step with `device:`+`recipe:` walks the entity's named recipe through the shared engine (OCR-wait then F5 — non-destructive)"
               id: jke-install
               jetkvm:
                   method: install

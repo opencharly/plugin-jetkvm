@@ -49,19 +49,32 @@ func (t jetkvmTransport) PressCombo(ctx context.Context, combo string) error {
 }
 
 func (t jetkvmTransport) press(ctx context.Context, method, value string) error {
-	in := params.JetkvmInput{Method: params.JetkvmMethod(method), AllowControl: true, HoldMs: t.holdMS}
-	if method == "key" {
-		in.KeyName = value
-	} else {
-		in.Combo = value
-	}
+	in := keyInput(method, value, t.holdMS)
 	_, err := runMethod(ctx, t.cl, t.op, &in)
 	return err
 }
 
 func (t jetkvmTransport) Type(ctx context.Context, text string) error {
-	_, err := runMethod(ctx, t.cl, t.op, &params.JetkvmInput{Method: "type", Text: text, AllowControl: true})
+	in := typeInput(text)
+	_, err := runMethod(ctx, t.cl, t.op, &in)
 	return err
+}
+
+// keyInput / typeInput build the JetkvmInput for one console-engine action. They
+// are PURE, so the exact input contract the engine drives is unit-locked without
+// a device (the device call itself is exercised live by the entity bed).
+func keyInput(method, value string, holdMS int) params.JetkvmInput {
+	in := params.JetkvmInput{Method: params.JetkvmMethod(method), AllowControl: true, HoldMs: holdMS}
+	if method == "key" {
+		in.KeyName = value
+	} else {
+		in.Combo = value
+	}
+	return in
+}
+
+func typeInput(text string) params.JetkvmInput {
+	return params.JetkvmInput{Method: "type", Text: text, AllowControl: true}
 }
 
 // runInstall drives the recipe on an already-connected client through the shared

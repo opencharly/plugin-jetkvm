@@ -35,3 +35,20 @@ func TestConsoleStepsToParams(t *testing.T) {
 		t.Fatalf("conversion: %+v", out)
 	}
 }
+
+// TestKeyInput / TestTypeInput pin the exact JetkvmInput the console engine
+// drives for each action — the transport's contract, unit-locked with no device.
+func TestKeyInput(t *testing.T) {
+	k := keyInput("key", "Return", 120)
+	if k.Method != "key" || k.KeyName != "Return" || !k.AllowControl || k.HoldMs != 120 {
+		t.Fatalf("key input wrong: %+v", k)
+	}
+	c := keyInput("key-combo", "ctrl+c", 0)
+	if c.Method != "key-combo" || c.Combo != "ctrl+c" || !c.AllowControl {
+		t.Fatalf("combo input wrong: %+v", c)
+	}
+	ty := typeInput("hello")
+	if ty.Method != "type" || ty.Text != "hello" || !ty.AllowControl {
+		t.Fatalf("type input wrong: %+v", ty)
+	}
+}
