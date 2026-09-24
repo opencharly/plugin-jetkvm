@@ -386,11 +386,12 @@ func (c *Client) CaptureScreenshot(ctx context.Context) (Screenshot, error) {
 		// A frame that never arrives produces the same error whatever the
 		// cause, so attach the localized boundary. Summary() is a bounded,
 		// privacy-safe line: counts, states and codec parameters only.
+		summary := c.VideoDiagnostics().Summary()
 		if ctx.Err() != nil {
 			return Screenshot{}, timeoutError("waiting for a video frame", fmt.Errorf(
-				"no video frame available: %w (%s)", err, c.VideoDiagnostics().Summary()))
+				"no video frame available: %w (%s%s)", err, summary, noSignalHint(c.VideoDiagnostics())))
 		}
-		return Screenshot{}, fmt.Errorf("jetkvm: no video frame available: %w (%s)", err, c.VideoDiagnostics().Summary())
+		return Screenshot{}, fmt.Errorf("jetkvm: no video frame available: %w (%s%s)", err, summary, noSignalHint(c.VideoDiagnostics()))
 	}
 
 	c.sess.diag.decodeAttempted(len(fr.annexB))

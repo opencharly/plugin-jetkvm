@@ -5,7 +5,7 @@
 # including one with a malformed `plugin.providers` entry. Declaring discover:
 # is the whole fix: the candy is scanned, the CUE schema gate applies, and the
 # stock `charly box validate` step starts working with no workflow change.
-version: 2026.249.2125
+version: 2026.261.1747
 discover:
     - path: candy
       recursive: true
@@ -280,7 +280,132 @@ jetkvm-input-probe:
               context: [runtime]
               eventually: 60s
               retry_interval: 5s
+            - check: the HID wake report reaches the controlled host (upstream's wakeHost RPC; wakes a display-asleep host)
+              id: jkctl-wake-host
+              jetkvm:
+                  method: wake-host
+                  allow_control: true
+              stdout:
+                  - contains: "HID wake report sent"
+              context: [runtime]
 jetkvm-input-host:
     local:
         description: minimal kind:local template for the input bed
+        candy: []
+
+# The OCR bed, read-only: proves the new `ocr` method reads the live screen and
+# asserts text, and that a NEGATIVE assertion fails loudly (the validator really
+# reads pixels, not passing vacuously). Env-driven like the other device beds.
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-ocr-readonly
+jetkvm-ocr-readonly:
+    local:
+        from: jetkvm-ocr-host
+        host: local
+        disposable: true
+        plan:
+            - check: the ocr method reads the live screen and finds on-screen text (the Omarchy wordmark, present on both the installer and the installed desktop — this bed proves the read, not a wizard transition; the screen-unique anchor rule belongs to recipe steps, not here)
+              id: jk-ocr-positive
+              jetkvm:
+                  method: ocr
+                  text: omarch
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: a screenshot with artifact_contains_text proves the OCR validator reads the PULLED PNG (the wait-for-screen primitive in screenshot form)
+              id: jk-artifact-text
+              jetkvm:
+                  method: screenshot
+                  artifact: /tmp/jetkvm-ocr-artifact.png
+                  artifact_min_bytes: 20000
+                  artifact_contains_text: omarch
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: a NEGATIVE ocr assertion fails loudly (proving the method reads pixels, not passing vacuously) — asserted by requiring exit 1 and the not-found message
+              id: jk-ocr-negative
+              jetkvm:
+                  method: ocr
+                  text: ZZZ-definitely-not-on-any-screen-ZZZ
+              exit_status: 1
+              stderr:
+                  - contains: "does not contain"
+              context: [runtime]
+              eventually: 12s
+              retry_interval: 4s
+jetkvm-ocr-host:
+    local:
+        description: minimal kind:local template for the OCR bed
+        candy: []
+
+# The INSTALL-DRIVER bed, read-only in EFFECT: it drives the first two wizard
+# transitions and then STOPS before anything is written to disk (no disk step is
+# reached). It proves the `install` method walks a recipe, OCR-gates each screen
+# and sends input on ONE session — the mechanism, exercised live without wiping a
+# machine. The FULL destructive install is a deliberate operator action (the
+# check-omarchy-jetkvm-install bed in distro-omarchy), never CI.
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+jetkvm-entity:
+    jetkvm:
+        description: >-
+            Minimal console-recipe entity for the entity-resolution bed. Its
+            recipe waits for the Omarchy wordmark (present on the installer AND
+            the installed desktop) then presses F5 (a harmless function key), so
+            the entity path, the install driver AND the transport's PressKey are
+            provable live without wiping a machine.
+        installer:
+            recipes:
+                probe:
+                    - wait_for: omarch
+                      action: key
+                      key: F5
+                      description: wait for the Omarchy wordmark, then press F5 (a harmless function key that exercises the transport's PressKey live)
+jetkvm-entity-probe:
+    local:
+        from: jetkvm-entity-host
+        host: local
+        disposable: true
+        plan:
+            - check: "a step naming a `kind: jetkvm` entity resolves it over the reverse channel and reads the device (the live entity-resolution path)"
+              id: jke-status
+              jetkvm:
+                  method: status
+                  device: jetkvm-entity
+              stdout:
+                  - contains: "rpc:       true"
+              context: [runtime]
+              eventually: 60s
+              retry_interval: 5s
+            - check: "an install step with `device:`+`recipe:` walks the entity's named recipe through the shared engine (OCR-wait then F5 — non-destructive)"
+              id: jke-install
+              jetkvm:
+                  method: install
+                  device: jetkvm-entity
+                  recipe: probe
+                  allow_control: true
+              stdout:
+                  - contains: "step 1"
+              context: [runtime]
+              eventually: 120s
+              retry_interval: 5s
+            - check: "an install step with an INLINE `steps:` recipe (no `device:`) walks that recipe through the shared engine — the inline branch of runInstall (OCR-wait then F6 — non-destructive)"
+              id: jke-inline
+              jetkvm:
+                  method: install
+                  allow_control: true
+                  steps:
+                      - wait_for: omarch
+                        action: key
+                        key: F6
+                        description: wait for the Omarchy wordmark, then press F6
+              stdout:
+                  - contains: "step 1"
+              context: [runtime]
+              eventually: 120s
+              retry_interval: 5s
+jetkvm-entity-host:
+    local:
+        description: minimal kind:local template for the entity-resolution bed
         candy: []

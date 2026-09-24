@@ -638,6 +638,22 @@ func (v VideoDiagnostics) Boundary() string {
 	}
 }
 
+// noSignalHint appends a likely-cause sentence when the boundary says the
+// device sent NO media at all. That is the signature of a controlled host
+// with no HDMI signal — powered off, display-asleep (DPMS), or unplugged —
+// so the message names the two upstream wake paths instead of leaving the
+// operator with a bare timeout. It is keyed ONLY to the boundary (a pure
+// function of the snapshot), never to a fresh network probe, so it adds no
+// latency and cannot itself fail.
+func noSignalHint(v VideoDiagnostics) string {
+	switch v.Boundary() {
+	case BoundaryNoRTP, BoundaryRTPStalled:
+		return " — the device is sending no video: the CONTROLLED HOST likely has no HDMI signal (powered off, display-asleep, or unplugged). Wake it with `wake-host` (display-asleep) or `wol` (powered off)."
+	default:
+		return ""
+	}
+}
+
 // Summary renders a single safe line suitable for embedding in an error
 // message. It carries the boundary plus the few counts that make the
 // boundary actionable, and nothing else.

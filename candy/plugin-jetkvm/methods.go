@@ -27,7 +27,7 @@ import (
 // later is mutating-by-default and cannot act on the device until it is
 // deliberately classified — the fail-safe direction for a physical appliance.
 var readOnlyMethods = map[string]bool{
-	"status": true, "screenshot": true, "version": true,
+	"status": true, "screenshot": true, "ocr": true, "version": true,
 	"diagnostics": true, "video-state": true, "usb-state": true,
 	"atx-state": true, "dc-state": true,
 	"virtual-media-state": true, "storage-files": true, "wol-devices": true,

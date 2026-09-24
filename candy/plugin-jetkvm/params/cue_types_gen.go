@@ -29,150 +29,206 @@ package params
 type JetkvmInput struct {
 	// method — the jetkvm method to dispatch (also the scalar-sugar primary:
 	// `jetkvm: <method>`).
-	Method JetkvmMethod `json:"method"`
+	Method JetkvmMethod `yaml:"method,omitempty" json:"method"`
 
 	// --- connection -------------------------------------------------------
 	// host — the device address ("host", "host:port", or an http(s) URL). When
 	// omitted the provider falls back to the JETKVM_HOST environment variable,
 	// then to the deploy's venue address. Authoring no host (and setting
 	// JETKVM_HOST) keeps a device-specific hostname out of a committed plan.
-	Host string `json:"host,omitempty"`
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 
 	// password — the device password. Prefer password_secret (the credential
 	// store); this literal exists for ad-hoc/CI use.
-	Password string `json:"password,omitempty"`
+	Password string `yaml:"password,omitempty" json:"password,omitempty"`
 
 	// password_secret — the credential-store key holding the device password.
-	PasswordSecret string `json:"password_secret,omitempty"`
+	PasswordSecret string `yaml:"password_secret,omitempty" json:"password_secret,omitempty"`
 
 	// auth_token — an already-valid authToken session cookie value, skipping login.
-	AuthToken string `json:"auth_token,omitempty"`
+	AuthToken string `yaml:"auth_token,omitempty" json:"auth_token,omitempty"`
 
 	// allow_control — REQUIRED to be true for every mutating method (input,
 	// power, USB, virtual media, config writes). Read-only methods ignore it.
 	// This is the device-safety gate: a physical appliance is not disposable.
-	AllowControl bool `json:"allow_control,omitempty"`
+	AllowControl bool `yaml:"allow_control,omitempty" json:"allow_control,omitempty"`
 
 	// insecure — permit a self-signed TLS certificate (the device ships
 	// self-signed by default). Also implied by an http:// host.
-	Insecure bool `json:"insecure,omitempty"`
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
 
 	// --- input (keyboard/pointer) ----------------------------------------
 	// text — the text `type` types.
-	Text string `json:"text,omitempty"`
+	Text string `yaml:"text,omitempty" json:"text,omitempty"`
 
 	// key — the named key `key` presses (Return, Escape, F5, Control_L, ...).
-	KeyName string `json:"key,omitempty"`
+	KeyName string `yaml:"key,omitempty" json:"key,omitempty"`
 
 	// combo — the chord `key-combo` presses, e.g. "Control_L+Alt_L+Delete".
-	Combo string `json:"combo,omitempty"`
+	Combo string `yaml:"combo,omitempty" json:"combo,omitempty"`
 
 	// hold_ms — how long `key`/`combo` holds before release (default 40).
-	HoldMs int `json:"hold_ms,omitempty"`
+	HoldMs int `yaml:"hold_ms,omitempty" json:"hold_ms,omitempty"`
 
 	// x / y — ABSOLUTE HID pointer coordinates for click/mouse/move/drag, in
 	// the device's [0,32767] range — NOT desktop pixels. Map a desktop pixel
 	// (px,py) on a WxH screen to (px*32767/(W-1), py*32767/(H-1)); the centre of
 	// a 1920x1080 screen is about (16384,16384).
-	X int `json:"x,omitempty"`
+	X int `yaml:"x,omitempty" json:"x,omitempty"`
 
-	Y int `json:"y,omitempty"`
+	Y int `yaml:"y,omitempty" json:"y,omitempty"`
 
 	// from_x / from_y — drag start coordinates.
-	FromX int `json:"from_x,omitempty"`
+	FromX int `yaml:"from_x,omitempty" json:"from_x,omitempty"`
 
-	FromY int `json:"from_y,omitempty"`
+	FromY int `yaml:"from_y,omitempty" json:"from_y,omitempty"`
 
 	// button — pointer button (left/right/middle; default left). Used by `click`
 	// and `drag`. `move`/`mouse` are pure position moves and NEVER press a
 	// button, so a `button:` on them is validated but not sent.
-	Button string `json:"button,omitempty"`
+	Button string `yaml:"button,omitempty" json:"button,omitempty"`
 
 	// scroll_x / scroll_y — wheel deltas (scroll).
-	ScrollX int `json:"scroll_x,omitempty"`
+	ScrollX int `yaml:"scroll_x,omitempty" json:"scroll_x,omitempty"`
 
-	ScrollY int `json:"scroll_y,omitempty"`
+	ScrollY int `yaml:"scroll_y,omitempty" json:"scroll_y,omitempty"`
 
 	// macro — the ordered key-steps a `macro` method executes.
-	Macro []JetkvmMacroStep `json:"macro,omitempty"`
+	Macro []JetkvmMacroStep `yaml:"macro,omitempty" json:"macro,omitempty"`
 
 	// --- power / ATX / DC -------------------------------------------------
 	// action — the power action: power-short | power-long | reset | on | off |
 	// restore-on | restore-off | restore-last.
-	Action string `json:"action,omitempty"`
+	Action string `yaml:"action,omitempty" json:"action,omitempty"`
 
 	// --- virtual media ----------------------------------------------------
 	// media_url — the HTTP(S) URL `virtual-media` mounts.
-	MediaUrl string `json:"media_url,omitempty"`
+	MediaUrl string `yaml:"media_url,omitempty" json:"media_url,omitempty"`
 
 	// media_file — the device-storage filename `virtual-media` mounts/deletes.
-	MediaFile string `json:"media_file,omitempty"`
+	MediaFile string `yaml:"media_file,omitempty" json:"media_file,omitempty"`
 
 	// media_mode — cdrom | disk.
-	MediaMode string `json:"media_mode,omitempty"`
+	MediaMode string `yaml:"media_mode,omitempty" json:"media_mode,omitempty"`
 
 	// --- usb --------------------------------------------------------------
 	// usb_device — absolute_mouse | relative_mouse | keyboard | mass_storage |
 	// serial_console | audio.
-	UsbDevice string `json:"usb_device,omitempty"`
+	UsbDevice string `yaml:"usb_device,omitempty" json:"usb_device,omitempty"`
 
 	// usb_enabled — enable/disable the addressed usb_device (or the whole
 	// emulation bus for `usb-emulation`).
-	UsbEnabled bool `json:"usb_enabled,omitempty"`
+	UsbEnabled bool `yaml:"usb_enabled,omitempty" json:"usb_enabled,omitempty"`
 
 	// --- config / network -------------------------------------------------
 	// value — the generic scalar a set-style method writes (rotation, layout,
 	// codec, factor, log level, extension id, ...).
-	Value string `json:"value,omitempty"`
+	Value string `yaml:"value,omitempty" json:"value,omitempty"`
 
 	// int_value — the generic integer a set-style method writes (brightness,
 	// dim_after, off_after, ...).
-	IntValue int `json:"int_value,omitempty"`
+	IntValue int `yaml:"int_value,omitempty" json:"int_value,omitempty"`
 
 	// settings — the raw JSON object a get/set settings method round-trips.
-	Settings string `json:"settings,omitempty"`
+	Settings string `yaml:"settings,omitempty" json:"settings,omitempty"`
 
 	// --- raw RPC escape hatch ---------------------------------------------
 	// rpc_method — the device JSON-RPC method `rpc` invokes.
-	RpcMethod string `json:"rpc_method,omitempty"`
+	RpcMethod string `yaml:"rpc_method,omitempty" json:"rpc_method,omitempty"`
 
 	// rpc_params — the JSON object of params for `rpc`.
-	RpcParams string `json:"rpc_params,omitempty"`
+	RpcParams string `yaml:"rpc_params,omitempty" json:"rpc_params,omitempty"`
+
+	// --- console OCR / installer -----------------------------------------
+	// OCR is the read-only screen-reading method: capture the frame, run OCR
+	// over it, and assert `text` (the field above, shared with `type`) is
+	// present. It is the wait-for-screen primitive in `check:`/`run:` form (no
+	// artifact required), the sibling of the `artifact_contains_text` validator
+	// on `screenshot`.
+	// install is the configurable console-wizard DRIVER (mutating): connect
+	// once and walk an ordered `steps:` recipe, OCR-waiting for each screen's
+	// anchor before sending its input. The recipe is generic DATA — the Omarchy
+	// (or any) installer's screens are supplied by the entity, never hardcoded
+	// here. It drives ANY text-console wizard: an OS installer, a first-boot
+	// provisioning flow, a firmware setup screen.
+	// steps — an INLINE recipe the `install` method drives (wins over the
+	// entity recipe).
+	Steps []JetkvmInstallStep `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	// device — the name of a `kind: jetkvm` device entity whose named recipe
+	// (`recipe:`) this step uses INSTEAD of inline steps:. The verb resolves it
+	// out-of-process over its reverse channel, so recipes live in one place in
+	// charly.yml and a bed references them by name.
+	Device string `yaml:"device,omitempty" json:"device,omitempty"`
+
+	// recipe — WHICH named recipe on the device entity to drive (default
+	// "install"). A device can carry several — e.g. `install` for the OS
+	// installer and `first_boot` for the post-reboot owner-provisioning wizard.
+	Recipe string `yaml:"recipe,omitempty" json:"recipe,omitempty"`
+
+	// answers — a name → value map `install` substitutes into every step's
+	// `text` via `{{name}}` placeholders, so one recipe serves many machines
+	// without editing the steps. The substitution is literal + single-pass
+	// (NOT charly `${VAR}` expansion), independent of the check env.
+	Answers map[string]string `yaml:"answers,omitempty" json:"answers,omitempty"`
+
+	// answer_secrets — a name → CREDENTIAL-STORE KEY map, resolved at run time
+	// and merged into `answers`. Use it for anything secret (a password, a LUKS
+	// passphrase): the value is read from the credential store over the reverse
+	// channel and NEVER appears in charly.yml. Explicit `answers` entries win.
+	AnswerSecrets map[string]string `yaml:"answer_secrets,omitempty" json:"answer_secrets,omitempty"`
+
+	// answers_env — a name → ENVIRONMENT-VARIABLE-NAME map, resolved at run time
+	// and merged into `answers`. The fully-configurable-from-the-environment
+	// path: the operator sets the env var and the recipe's {{placeholder}}
+	// resolves to it, with nothing machine-specific committed. Precedence:
+	// answers (authored) > answer_secrets > answers_env.
+	AnswersEnv map[string]string `yaml:"answers_env,omitempty" json:"answers_env,omitempty"`
 
 	// --- artifact ---------------------------------------------------------
 	// artifact — the host path `screenshot` writes the PNG to.
-	Artifact string `json:"artifact,omitempty"`
+	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
 
 	// artifact_dir — the runner-injected generic evidence-artifact dir.
-	ArtifactDir string `json:"artifact_dir,omitempty"`
+	ArtifactDir string `yaml:"artifact_dir,omitempty" json:"artifact_dir,omitempty"`
 
 	// session_id — the detached-recorder session id (`session`).
-	SessionId string `json:"session_id,omitempty"`
+	SessionId string `yaml:"session_id,omitempty" json:"session_id,omitempty"`
 
 	// state_dir — the detached recorder's state directory.
-	StateDir string `json:"state_dir,omitempty"`
+	StateDir string `yaml:"state_dir,omitempty" json:"state_dir,omitempty"`
 
 	// fps — the detached recorder capture rate (default 5).
-	Fps int `json:"fps,omitempty"`
+	Fps int `yaml:"fps,omitempty" json:"fps,omitempty"`
 
 	// duration_sec — how long a recording/bounded capture runs.
-	DurationSec int `json:"duration_sec,omitempty"`
+	DurationSec int `yaml:"duration_sec,omitempty" json:"duration_sec,omitempty"`
 
 	// log_dir — the detached recorder's log directory.
-	LogDir string `json:"log_dir,omitempty"`
+	LogDir string `yaml:"log_dir,omitempty" json:"log_dir,omitempty"`
 
 	// venue / phase — stamped into the recorder's evidence row.
-	Venue string `json:"venue,omitempty"`
+	Venue string `yaml:"venue,omitempty" json:"venue,omitempty"`
 
-	Phase string `json:"phase,omitempty"`
+	Phase string `yaml:"phase,omitempty" json:"phase,omitempty"`
 
-	// artifact_min_bytes / artifact_min_dimensions / artifact_not_uniform —
-	// the post-run artifact-reality assertions (sdk.RunArtifactValidators).
-	ArtifactMinBytes int `json:"artifact_min_bytes,omitempty"`
+	// artifact_min_bytes / artifact_min_dimensions / artifact_not_uniform /
+	// artifact_contains_text — the post-run artifact-reality assertions
+	// (sdk.RunArtifactValidators) THIS verb can produce. artifact_contains_text is
+	// the OCR wait-for-screen primitive in `screenshot` form: it runs tesseract on
+	// the HOST over the pulled PNG and asserts the text is present, so a
+	// `screenshot` step can gate on what the screen actually shows.
+	//
+	// artifact_min_cast_events is deliberately NOT here: it validates an asciinema
+	// `.cast` file, and the jetkvm verb produces only PNGs — the field would be
+	// dead surface, so it is omitted rather than shipped unexercised.
+	ArtifactMinBytes int `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"`
 
-	ArtifactMinDimensions string `json:"artifact_min_dimensions,omitempty"`
+	ArtifactMinDimensions string `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"`
 
-	ArtifactNotUniform bool `json:"artifact_not_uniform,omitempty"`
+	ArtifactNotUniform bool `yaml:"artifact_not_uniform,omitempty" json:"artifact_not_uniform,omitempty"`
+
+	ArtifactContainsText string `yaml:"artifact_contains_text,omitempty" json:"artifact_contains_text,omitempty"`
 }
 
 // #JetkvmMethod — the method catalog. Grouped by intent so the read-only
@@ -185,9 +241,99 @@ type JetkvmMethod string
 
 // #JetkvmMacroStep — one step of a keyboard macro.
 type JetkvmMacroStep struct {
-	Keys []string `json:"keys,omitempty"`
+	Keys []string `yaml:"keys,omitempty" json:"keys,omitempty"`
 
-	Modifiers []string `json:"modifiers,omitempty"`
+	Modifiers []string `yaml:"modifiers,omitempty" json:"modifiers,omitempty"`
 
-	Delay int64 `json:"delay,omitempty"`
+	Delay int64 `yaml:"delay,omitempty" json:"delay,omitempty"`
+}
+
+// #JetkvmInstallStep — ONE step of a console-installer recipe driven by the
+// `install` method. Each step OCR-waits for its `wait_for` anchor to appear on
+// the screen, then performs ONE input action. `wait_for` MUST be a
+// screen-UNIQUE string: a string present on every screen (e.g. a logo) passes
+// vacuously and desynchronises the whole drive.
+type JetkvmInstallStep struct {
+	// wait_for — screen-unique text the step waits for before acting.
+	WaitFor string `yaml:"wait_for,omitempty" json:"wait_for"`
+
+	// action — the input to send once `wait_for` is on screen. Omitted means the
+	// step only waits (a pure synchronisation/observation step).
+	Action string `yaml:"action,omitempty" json:"action,omitempty"`
+
+	// key — the named key for action: key (Return, Escape, F5, ...).
+	KeyName string `yaml:"key,omitempty" json:"key,omitempty"`
+
+	// combo — the chord for action: key-combo (ctrl+c, ctrl+alt+Delete, ...).
+	Combo string `yaml:"combo,omitempty" json:"combo,omitempty"`
+
+	// text — the text for action: type.
+	Text string `yaml:"text,omitempty" json:"text,omitempty"`
+
+	// timeout_sec — how long to wait for `wait_for` before failing (default 120).
+	TimeoutSec int `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
+
+	// optional — when true, a wait that times out (the anchor never appears)
+	// SKIPS the step instead of failing the drive, and its action is not sent.
+	// Use it for a screen that is only sometimes present (a keyboard picker on a
+	// machine that already recorded one, an install-mode picker only offered when
+	// free space exists) — so one recipe serves both shapes.
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+
+	// artifact — optional host path to save the frame captured for this step.
+	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+
+	// description — optional human label for the step's evidence line.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// #JetkvmDeviceInput — the authored `kind: jetkvm` DEVICE entity body. It is
+// the plugin's configurable surface: the device address + credentials, and an
+// optional installer recipe + answers. Consumed by the plugin's OpLoad (to
+// store the typed entity) and used by `charly jetkvm install <entity>` and by
+// a local/VM deploy that names it.
+type JetkvmDeviceInput struct {
+	// host — the device address. Omit to fall back to JETKVM_HOST at runtime.
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	// insecure — permit the device's self-signed TLS certificate.
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+
+	// password_secret — credential-store key holding the device password.
+	PasswordSecret string `yaml:"password_secret,omitempty" json:"password_secret,omitempty"`
+
+	// description — human label for the device.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	// installer — the console-installer recipe + answers for this device.
+	Installer *JetkvmInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
+}
+
+// #JetkvmInstaller — the installer/wizard configuration for a `kind: jetkvm`
+// device. One device can carry SEVERAL named recipes (an OS installer AND the
+// post-reboot first-boot provisioning wizard are two), each a named `steps:`
+// list under `recipes:`.
+type JetkvmInstaller struct {
+	// recipes — name → ordered recipe. The conventional names are `install`
+	// (the OS installer, the default) and `first_boot` (the post-reboot owner
+	// provisioning wizard), but any name works: a step selects one with
+	// `recipe:`.
+	Recipes map[string][]JetkvmInstallStep `yaml:"recipes,omitempty" json:"recipes,omitempty"`
+
+	// steps — a SHORTCUT for recipes.install, so a single-recipe device needs no
+	// nesting. If both are set, `recipes.install` wins.
+	Steps []JetkvmInstallStep `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	// answers — a name → value map the install driver substitutes into step
+	// `text` fields via `{{name}}` placeholders.
+	Answers map[string]string `yaml:"answers,omitempty" json:"answers,omitempty"`
+
+	// answer_secrets — a name → credential-store key map, resolved at run time
+	// and merged into answers. Use for secrets so nothing plaintext is committed.
+	AnswerSecrets map[string]string `yaml:"answer_secrets,omitempty" json:"answer_secrets,omitempty"`
+
+	// answers_env — a name → environment-variable-name map, resolved at run time
+	// and merged into answers (lowest precedence). The environment-configurable
+	// path: nothing machine-specific is committed.
+	AnswersEnv map[string]string `yaml:"answers_env,omitempty" json:"answers_env,omitempty"`
 }

@@ -54,7 +54,7 @@ plumbing is charly's own SDK surface, never a second implementation.
 
 ## Methods
 
-Read-only: `status`, `screenshot`, `version`, `video-state`, `usb-state`,
+Read-only: `status`, `screenshot`, `ocr`, `version`, `video-state`, `usb-state`,
 `atx-state`, `dc-state`, `virtual-media-state`, `storage-files`, `wol-devices`,
 `macros`, `keyboard-layout`, `timezones`, `cloud-state`, `network-state`,
 `network-settings`, `tailscale-status`, `update-status`, `devmode-state`,
@@ -62,12 +62,17 @@ Read-only: `status`, `screenshot`, `version`, `video-state`, `usb-state`,
 `check-media-url`, `usb-config`.
 
 Mutating (need `allow_control: true`): `key`, `type`, `key-combo`, `macro`,
-`click`, `mouse`, `move`, `scroll`, `drag`, `power`, `dc-power`, `reboot`, `wol`,
-`virtual-media`, `usb-device`, `usb-emulation`, `set-settings`, `set-edid`,
+`click`, `mouse`, `move`, `scroll`, `drag`, `install`, `power`, `dc-power`, `reboot`, `wol`,
+`wake-host`, `virtual-media`, `usb-device`, `usb-emulation`, `set-settings`,
+`set-edid`,
 `set-video`, `set-display`, `set-audio`, `set-network`, `set-tailscale`,
 `set-devmode`, `set-ssh-key`, `set-tls`, `set-keyboard-layout`, `set-macros`,
 `set-jiggler`, `set-extension`, `set-wol-devices`, `set-log-level`,
 `renew-dhcp`, `rpc`.
+
+`wake-host` vs `wol`: `wake-host` sends the device's own USB HID wake report
+(upstream's `wakeHost` RPC) and wakes a host that is **display-asleep** (DPMS);
+`wol` sends a magic packet and only helps a host that is **powered off**.
 
 `rpc` is MUTATING, deliberately: it can invoke ANY device JSON-RPC method, so an
 ungated escape hatch would be a bypass of the safety gate. It requires

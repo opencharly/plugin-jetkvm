@@ -42,6 +42,18 @@ type provider struct{ pb.UnimplementedProviderServer }
 
 // Invoke runs one `jetkvm:` operation.
 func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+	// OpLoad is the KIND leg: the host validates the authored `kind: jetkvm`
+	// entity against #JetkvmDeviceInput, then dispatches OpLoad with the raw,
+	// canonical body (NOT the #Op envelope the verb leg carries). Re-marshal it
+	// so it lands in uf.PluginKinds["jetkvm"][name].
+	if req.GetOp() == sdk.OpLoad {
+		out, err := deviceCanonicalJSON(req.GetParamsJson())
+		if err != nil {
+			return nil, err
+		}
+		return &pb.InvokeReply{ResultJson: out}, nil
+	}
+
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {
@@ -61,6 +73,31 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 	// skip, so a plan carrying `jetkvm:` steps still passes the build check.
 	if env.Mode == "box" {
 		return sdk.ResultJSON("skip", fmt.Sprintf("jetkvm: %s requires a live device (skip under charly check box)", method))
+	}
+
+	// A referenced `kind: jetkvm` device entity supplies connection defaults AND
+	// the installer recipe. The verb resolves it PLUGIN-SIDE over its reverse
+	// channel (the RDD-proven path); authored step fields win over the entity's.
+	if in.Device != "" {
+		if ex, exErr := sdk.ExecutorForInvoke(ctx, req.GetExecutorBrokerId()); exErr == nil && ex != nil {
+			if err := applyDeviceEntity(ctx, ex, req.GetExecutorBrokerId(), &in); err != nil {
+				return sdk.ResultJSON("fail", err.Error())
+			}
+		} else {
+			return sdk.ResultJSON("fail", fmt.Sprintf("jetkvm: %s references device %q but the host reverse channel is unavailable (run it inside a deploy/check step)", method, in.Device))
+		}
+	}
+
+	// Resolve the step's own answer sources (independent of any device entity),
+	// so an inline recipe can be env-configured AND keep a password out of
+	// charly.yml. The SAME three-source merge the entity path uses (R3):
+	// answers_env (host environment) < answer_secrets (credential store) <
+	// authored answers. One kit.MergeAnswers call, never a hand-rolled loop.
+	if len(in.AnswersEnv) > 0 || len(in.AnswerSecrets) > 0 {
+		in.Answers = kit.MergeAnswers(in.AnswersEnv, in.AnswerSecrets, in.Answers,
+			os.Getenv, func(key string) string {
+				return credentialLookup(ctx, req.GetExecutorBrokerId(), key)
+			})
 	}
 
 	// Resolve the device address: the authored host first, then the

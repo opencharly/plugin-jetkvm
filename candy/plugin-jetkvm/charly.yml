@@ -3,17 +3,18 @@ plugin-jetkvm:
     candy:
         version: 2026.258.1200
         description: |-
-            OUT-OF-TREE charly plugin serving the `jetkvm` IP-KVM verb — a standalone
-            Go module (go.mod + cmd/serve) that drives a JetKVM device
-            (https://jetkvm.com) without a browser, over JetKVM's own WebRTC
-            control plane: local login (POST /auth/login-local) -> signaling
-            websocket (/webrtc/signaling/client) -> the "rpc" JSON-RPC 2.0 data
-            channel, the binary "hidrpc" input channel, and the H.264 video track
-            decoded to a PNG by ffmpeg. It is served OUT-OF-PROCESS over go-plugin
-            gRPC via the charly plugin SDK (github.com/opencharly/sdk); charly's
-            loader fetches this candy's repo, go-builds the provider binary on the
-            HOST, and connects it via LocalTransport, so the device wire lives
-            HERE, out of charly's core check surface.
+            OUT-OF-TREE charly plugin serving the `jetkvm` IP-KVM verb AND the
+            `kind: jetkvm` device entity — a standalone Go module (go.mod +
+            cmd/serve) that drives a JetKVM device (https://jetkvm.com) without a
+            browser, over JetKVM's own WebRTC control plane: local login
+            (POST /auth/login-local) -> signaling websocket
+            (/webrtc/signaling/client) -> the "rpc" JSON-RPC 2.0 data channel, the
+            binary "hidrpc" input channel, and the H.264 video track decoded to a
+            PNG by ffmpeg. It is served OUT-OF-PROCESS over go-plugin gRPC via the
+            charly plugin SDK (github.com/opencharly/sdk); charly's loader fetches
+            this candy's repo, go-builds the provider binary on the HOST, and
+            connects it via LocalTransport, so the device wire lives HERE, out of
+            charly's core check surface.
 
             READ-ONLY BY DEFAULT. The device is a physical appliance and is NOT
             disposable, so every mutating method (keyboard/pointer input, power and
@@ -30,6 +31,17 @@ plugin-jetkvm:
             artifact validators (sdk.VerbVerdict / sdk.RunArtifactValidators), so it
             owns the verdict exactly like every other out-of-process verb.
 
+            CONSOLE INSTALLER. Beyond raw input, the plugin serves two higher-level
+            capabilities: the read-only `ocr` method (capture + tesseract on the
+            host + assert text — the wait-for-screen primitive), and the mutating
+            `install` method, a configurable console-installer DRIVER that connects
+            ONCE and walks an ordered `steps:` recipe, OCR-waiting for each
+            screen-unique anchor before sending its key/type/combo input. The
+            recipe is generic DATA supplied by a `kind: jetkvm` device entity, so
+            one plugin drives any text-console installer with no per-distro code.
+            The OCR wait is the reason it opens one session: a per-step connection
+            would pay a fresh WebRTC handshake for every screen.
+
             Client reuse, not reinvention: the WebRTC/HID wire is vendored from
             LeeroyDing/jetkvm-mcp (MIT) and conallob/mcp-jetkvm (BSD-3) under
             internal/kvmclient (see third_party/NOTICE) and rides the SAME
@@ -41,6 +53,7 @@ plugin-jetkvm:
             source: github.com/opencharly/plugin-jetkvm/candy/plugin-jetkvm
             providers:
                 - verb:jetkvm
+                - kind:jetkvm
             primary:
                 jetkvm: method
         plan:
@@ -51,6 +64,17 @@ plugin-jetkvm:
                 exists: true
               context:
                 - build
+            - check: "the verb and kind capabilities are declared together, so a jetkvm step dispatches AND a kind jetkvm entity is recognized at parse (a probe that fails if either declaration is dropped)"
+              id: jetkvm-capabilities-declared
+              command:
+                # Anchored to the DECLARATION lines (leading spaces + "- verb:jetkvm"
+                # at end of line), NOT a bare substring: the check's own command text
+                # contains the substrings, so an unanchored grep would match itself and
+                # stay green even if the declaration were deleted.
+                command: 'grep -qE "^[[:space:]]+-[[:space:]]*verb:jetkvm[[:space:]]*$" candy/plugin-jetkvm/charly.yml && grep -qE "^[[:space:]]+-[[:space:]]*kind:jetkvm[[:space:]]*$" candy/plugin-jetkvm/charly.yml'
+                in_container: false
+              context:
+                - runtime
             - check: the jetkvm verb dispatches through the provider registry and reports its documented no-device skip — proving the out-of-process plugin was host-built, connected, and ran its verdict path (a step that FAILS if the verb is unregistered or the module will not build/serve)
               id: jetkvm-verb-dispatches
               jetkvm: status
