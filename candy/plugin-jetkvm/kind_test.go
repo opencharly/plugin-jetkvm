@@ -103,6 +103,28 @@ func TestWakeHostIsMutating(t *testing.T) {
 	}
 }
 
+// TestSessionMethodsAreMutating pins that every terminal-session method is gated:
+// open-terminal (HID hotkey), run-command (HID input), close-terminal (HID input)
+// and luks-unlock (types a passphrase) all drive the controlled machine's
+// keyboard, so each must require allow_control. The gate's fail-safe direction
+// (allowlist) already makes a new method mutating-by-default; this test makes the
+// classification DELIBERATE and prevents a future silent addition to the
+// read-only set.
+func TestSessionMethodsAreMutating(t *testing.T) {
+	for _, m := range []string{"open-terminal", "run-command", "close-terminal", "luks-unlock"} {
+		if readOnlyMethods[m] {
+			t.Fatalf("%s must NOT be read-only (it drives the controlled machine's input)", m)
+		}
+		skip, reason := methodSafety(m, false)
+		if !skip || !strings.Contains(reason, "allow_control") {
+			t.Fatalf("%s without allow_control must skip naming the gate, got skip=%v reason=%q", m, skip, reason)
+		}
+		if skip, _ := methodSafety(m, true); skip {
+			t.Fatalf("%s WITH allow_control must be permitted", m)
+		}
+	}
+}
+
 // TestEntityMergePrecedence pins the precedence contract: an authored step field
 // overrides the entity-supplied default. Tested via the pure merge shape
 // (applyDeviceEntity's network half needs the reverse channel).

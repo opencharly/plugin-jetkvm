@@ -107,6 +107,11 @@ var requiredModifiers = map[string][]string{
 	"virtual-media": {"action"},
 	"screenshot":    {"artifact"},
 	"rpc":           {"rpc_method"},
+	"run-command":   {"commands"},
+	// luks-unlock is NOT listed: a passphrase is required, but it may arrive as
+	// either `passphrase:` or `passphrase_secret:` — CheckRequiredModifiers ANDs
+	// its fields, so an either/or requirement is enforced in runLUKSUnlock, which
+	// names both options in its error.
 }
 
 // skipError marks a policy-gated skip (distinct from a device failure). The
