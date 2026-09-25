@@ -219,6 +219,13 @@
 	// flow_max_steps / flow_max_loops — the loop bounds (defaults 200 / 50).
 	flow_max_steps?: int & >=1 @go(FlowMaxSteps,type=int)
 	flow_max_loops?: int & >=1 @go(FlowMaxLoops,type=int)
+	// flow_resume — when true, AUTO-DETECT the node whose wait matches the
+	// CURRENT screen and start there, so a re-run after a stall/restart recovers
+	// to the right step instead of replaying from `flow_start`.
+	flow_resume?: bool @go(FlowResume)
+	// flow_resume_order — the node ids EARLIEST→LATEST; when a screen matches
+	// several nodes, the latest-listed match is the resume point (disambiguates).
+	flow_resume_order?: [...string] @go(FlowResumeOrder)
 
 	// --- boot order (EFI boot manager, target-side over the terminal) ------
 	// `boot-order` sets the UEFI boot order from INSIDE the running system, using
@@ -375,8 +382,18 @@
 #JetkvmFlowOutcome: {
 	// name — the outcome identifier, keyed in a node's `transitions`.
 	name: string & !="" @go(Name)
-	// match — the case-insensitive substring that identifies this outcome.
-	match: string & !="" @go(Match)
+	// match — the case-insensitive OCR substring that identifies this outcome
+	// (omit when the outcome is a `reference:` screen match).
+	match?: string @go(Match)
+	// reference — a host path to a PREVIOUSLY-CAPTURED screenshot of this screen.
+	// The outcome matches by SCREEN FINGERPRINT (a perceptual hash) instead of
+	// OCR, so a screen that OCRs badly (a firmware menu, a graphical lock) is
+	// still recognisable, and an action can be triggered when the current screen
+	// matches the reference.
+	reference?: string @go(Reference)
+	// max_distance — the Hamming threshold for a `reference:` match (0..64;
+	// default 5). Higher tolerates more rendering difference.
+	max_distance?: int & >=0 & <=64 @go(MaxDistance,type=int)
 	// failure — marks a failure outcome (a wrong-passphrase / error screen). It
 	// fails the flow unless a `transitions` entry routes it (a recovery branch).
 	failure?: bool @go(Failure)

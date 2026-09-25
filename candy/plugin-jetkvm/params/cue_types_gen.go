@@ -262,6 +262,15 @@ type JetkvmInput struct {
 
 	FlowMaxLoops int `yaml:"flow_max_loops,omitempty" json:"flow_max_loops,omitempty"`
 
+	// flow_resume — when true, AUTO-DETECT the node whose wait matches the
+	// CURRENT screen and start there, so a re-run after a stall/restart recovers
+	// to the right step instead of replaying from `flow_start`.
+	FlowResume bool `yaml:"flow_resume,omitempty" json:"flow_resume,omitempty"`
+
+	// flow_resume_order — the node ids EARLIEST→LATEST; when a screen matches
+	// several nodes, the latest-listed match is the resume point (disambiguates).
+	FlowResumeOrder []string `yaml:"flow_resume_order,omitempty" json:"flow_resume_order,omitempty"`
+
 	// --- boot order (EFI boot manager, target-side over the terminal) ------
 	// `boot-order` sets the UEFI boot order from INSIDE the running system, using
 	// the EFI boot manager `efibootmgr` in an open terminal — the OS-side
@@ -481,8 +490,20 @@ type JetkvmFlowOutcome struct {
 	// name — the outcome identifier, keyed in a node's `transitions`.
 	Name string `yaml:"name,omitempty" json:"name"`
 
-	// match — the case-insensitive substring that identifies this outcome.
-	Match string `yaml:"match,omitempty" json:"match"`
+	// match — the case-insensitive OCR substring that identifies this outcome
+	// (omit when the outcome is a `reference:` screen match).
+	Match string `yaml:"match,omitempty" json:"match,omitempty"`
+
+	// reference — a host path to a PREVIOUSLY-CAPTURED screenshot of this screen.
+	// The outcome matches by SCREEN FINGERPRINT (a perceptual hash) instead of
+	// OCR, so a screen that OCRs badly (a firmware menu, a graphical lock) is
+	// still recognisable, and an action can be triggered when the current screen
+	// matches the reference.
+	Reference string `yaml:"reference,omitempty" json:"reference,omitempty"`
+
+	// max_distance — the Hamming threshold for a `reference:` match (0..64;
+	// default 5). Higher tolerates more rendering difference.
+	MaxDistance int `yaml:"max_distance,omitempty" json:"max_distance,omitempty"`
 
 	// failure — marks a failure outcome (a wrong-passphrase / error screen). It
 	// fails the flow unless a `transitions` entry routes it (a recovery branch).

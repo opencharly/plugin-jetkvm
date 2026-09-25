@@ -117,7 +117,10 @@ func runFlow(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *params.
 	for id, n := range in.FlowNodes {
 		waits := make([]kit.ConsoleFlowOutcome, 0, len(n.Wait))
 		for _, o := range n.Wait {
-			waits = append(waits, kit.ConsoleFlowOutcome{Name: o.Name, Match: o.Match, Failure: o.Failure})
+			waits = append(waits, kit.ConsoleFlowOutcome{
+				Name: o.Name, Match: o.Match, Reference: o.Reference,
+				MaxDistance: o.MaxDistance, Failure: o.Failure,
+			})
 		}
 		nodes[id] = kit.ConsoleFlowNode{
 			ID:          id,
@@ -133,7 +136,7 @@ func runFlow(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *params.
 			TimeoutSec:  n.TimeoutSec,
 		}
 	}
-	res, err := kit.RunConsoleFlow(ctx, sessionTransport(cl, op), in.FlowStart, nodes, in.SudoPassword, in.FlowMaxSteps, in.FlowMaxLoops)
+	res, err := kit.RunConsoleFlowResume(ctx, sessionTransport(cl, op), in.FlowStart, nodes, in.SudoPassword, in.FlowMaxSteps, in.FlowMaxLoops, in.FlowResume, in.FlowResumeOrder)
 	if err != nil {
 		return kit.RenderFlowEvidence(res), fmt.Errorf("jetkvm: flow: %w", err)
 	}
