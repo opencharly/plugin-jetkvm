@@ -80,7 +80,7 @@ func runCommands(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *par
 	if err != nil {
 		return "", err
 	}
-	return kit.RunCommands(ctx, sessionTransport(cl, op), cmds, sudoPassword, in.CloseTerminal)
+	return kit.RunCommands(ctx, sessionTransport(cl, op), cmds, sudoPassword, in.CloseTerminal, in.PromptAnchors)
 }
 
 // runCloseTerminal decodes `close-terminal` into the shared action.
@@ -136,7 +136,16 @@ func runFlow(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *params.
 			TimeoutSec:  n.TimeoutSec,
 		}
 	}
-	res, err := kit.RunConsoleFlowResume(ctx, sessionTransport(cl, op), in.FlowStart, nodes, in.SudoPassword, in.FlowMaxSteps, in.FlowMaxLoops, in.FlowResume, in.FlowResumeOrder)
+	res, err := kit.RunConsoleFlow(ctx, sessionTransport(cl, op), kit.ConsoleFlowSpec{
+		Start:            in.FlowStart,
+		Nodes:            nodes,
+		SudoPassword:     in.SudoPassword,
+		MaxSteps:         in.FlowMaxSteps,
+		MaxLoops:         in.FlowMaxLoops,
+		ResumeFromScreen: in.FlowResume,
+		ResumeOrder:      in.FlowResumeOrder,
+		PromptAnchors:    in.PromptAnchors,
+	})
 	if err != nil {
 		return kit.RenderFlowEvidence(res), fmt.Errorf("jetkvm: flow: %w", err)
 	}
