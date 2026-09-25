@@ -1,11 +1,11 @@
 package jetkvm
 
-// session_test.go pins the jetkvm session methods' DECODING and their wiring into
-// the shared kit.ConsoleSession engine, with no device. The engine's own logic
-// (marker/echo trap, sudo, passphrase) is unit-tested where it lives —
-// sdk/kit/console_session_test.go — so it is not duplicated here (R3). What this
-// file owns is: the param → kit conversion, the required-field guards, and the
-// defaults (terminal combo, prompt anchors, LUKS outcomes).
+// session_test.go pins this plugin's DECODE of the terminal-session / flow /
+// boot-order params into the SDK's shared console actions. The actions' own
+// logic (marker/echo trap, sudo, passphrase, flow routing) is unit-tested where
+// it lives — sdk/kit/console_actions.go + console_session.go + console_flow.go —
+// so it is not duplicated here (R3). What this file owns: the param → neutral
+// conversion, the required-field guards, and the dispatch wiring.
 
 import (
 	"context"
@@ -16,124 +16,78 @@ import (
 	"github.com/opencharly/sdk/kit"
 )
 
-// TestSessionFor_SharesTransportAndSudo pins the ONE construction point: every
-// session method builds the engine over the jetkvm transport and the supplied
-// sudo password (R3 — no per-method construction drift).
-func TestSessionFor_SharesTransportAndSudo(t *testing.T) {
-	s := sessionFor(nil, nil, "hunter2")
-	if s.SudoPassword != "hunter2" {
-		t.Fatalf("sudo password not carried: %+v", s)
-	}
-	if s.Transport == nil {
-		t.Fatal("transport must be set")
-	}
-}
-
-// TestRunCommands_ConvertsAndRuns proves the commands decode into the shared
-// engine and each runs, reading its OCR output. The transport simulates a shell
-// that echoes the typed line then, for the command line, prints the marker line.
-func TestRunCommands_ConvertsAndRuns(t *testing.T) {
-	tr := &shellTransport{}
-	s := sessionForFromTransport(tr, "")
-	results, err := s.RunCommands(context.Background(), []kit.ConsoleCommand{
-		{Command: "uname -r", Expect: "kernel"},
-		{Command: "id"},
-	})
+// TestSessionCommands_Decodes pins the PURE param→neutral mapping (the decode is
+// this plugin's unit; the engine's behavior lives in sdk/kit).
+func TestSessionCommands_Decodes(t *testing.T) {
+	in := &params.JetkvmInput{Commands: []params.JetkvmSessionCommand{
+		{Command: "id", Sudo: true, Expect: "uid", TimeoutSec: 30, Artifact: "/tmp/a"},
+		{Command: "uname -r"},
+	}}
+	got, err := sessionCommands(in)
 	if err != nil {
-		t.Fatalf("RunCommands: %v", err)
+		t.Fatalf("sessionCommands: %v", err)
 	}
-	if len(results) != 2 {
-		t.Fatalf("both commands must run: %d", len(results))
+	if len(got) != 2 {
+		t.Fatalf("want 2 commands, got %d", len(got))
 	}
-	for _, r := range results {
-		if !strings.Contains(r.Output, "kernel") {
-			t.Fatalf("output not read for %q: %q", r.Command, r.Output)
-		}
+	if !got[0].Sudo || got[0].Expect != "uid" || got[0].TimeoutSec != 30 || got[0].Artifact != "/tmp/a" {
+		t.Fatalf("first command not decoded: %+v", got[0])
 	}
-}
-
-// TestRunCommands_EmptyListFails is the required-field guard on the method path.
-func TestRunCommands_EmptyListFails(t *testing.T) {
-	_, err := runCommands(context.Background(), nil, nil, &params.JetkvmInput{}, "")
-	if err == nil || !strings.Contains(err.Error(), "non-empty commands") {
-		t.Fatalf("want commands-required failure, got %v", err)
+	if got[1].Command != "uname -r" || got[1].Sudo {
+		t.Fatalf("second command not decoded: %+v", got[1])
 	}
 }
 
-// TestRunCommands_BlankCommandFails names the offending index.
-func TestRunCommands_BlankCommandFails(t *testing.T) {
+// TestSessionCommands_BlankCommandFails names the offending index before any
+// device call — the required-field guard on the decode path.
+func TestSessionCommands_BlankCommandFails(t *testing.T) {
 	in := &params.JetkvmInput{Commands: []params.JetkvmSessionCommand{{Command: "  "}}}
-	_, err := runCommands(context.Background(), nil, nil, in, "")
+	_, err := sessionCommands(in)
 	if err == nil || !strings.Contains(err.Error(), "command 1 is empty") {
 		t.Fatalf("want blank-command failure, got %v", err)
 	}
 }
 
 // TestRunLUKSUnlock_RequiresPassphrase pins the either/or guard (passphrase or
-// passphrase_secret) and that its error names BOTH options.
+// passphrase_secret) and that its error names the secret option.
 func TestRunLUKSUnlock_RequiresPassphrase(t *testing.T) {
 	_, err := runLUKSUnlock(context.Background(), nil, nil, &params.JetkvmInput{})
 	if err == nil || !strings.Contains(err.Error(), "passphrase_secret") {
-		t.Fatalf("want passphrase-required failure naming both options, got %v", err)
+		t.Fatalf("want passphrase-required failure naming the secret option, got %v", err)
 	}
 }
 
-// TestSessionDefaults pins the documented defaults the methods apply when the
-// author omits them.
-func TestSessionDefaults(t *testing.T) {
-	if defaultTerminalCombo != "super+Return" {
-		t.Fatalf("terminal combo default changed: %q", defaultTerminalCombo)
+// TestRunBootOrder_GuardPaths pins the required-field guards on the boot-order
+// decode: an absent action, and a next/set missing its entry/sequence. These
+// fail before any terminal session.
+func TestRunBootOrder_Guards(t *testing.T) {
+	cases := []struct {
+		name string
+		in   *params.JetkvmInput
+		want string
+	}{
+		{"no action", &params.JetkvmInput{}, "requires an action"},
+		{"next no entry", &params.JetkvmInput{BootOrderAction: "next"}, "requires an entry"},
+		{"set no sequence", &params.JetkvmInput{BootOrderAction: "set"}, "requires a sequence"},
 	}
-	if len(defaultPromptAnchors) == 0 || len(defaultLUKSSuccessAnchors) == 0 || len(defaultLUKSFailureAnchors) == 0 {
-		t.Fatal("prompt/LUKS defaults must be non-empty")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := kit.RunBootOrder(context.Background(), nil, kit.BootOrder{
+				Action: string(tc.in.BootOrderAction), Entry: tc.in.BootOrderEntry, Sequence: tc.in.BootOrderSequence,
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 
-// shellTransport simulates a shell: it echoes the last typed line; once a command
-// line was submitted it also prints a fixed result and the shell's own marker
-// LINE, so kit.ConsoleSession sees genuine completion.
-type shellTransport struct {
-	keys  []string
-	types []string
-}
-
-func (s *shellTransport) Capture(context.Context) ([]byte, error) {
-	if len(s.types) == 0 {
-		return []byte("prompt $ "), nil
+// TestRunFlow_Guards pins the flow decode's required-field guards.
+func TestRunFlow_Guards(t *testing.T) {
+	if _, err := runFlow(context.Background(), nil, nil, &params.JetkvmInput{}); err == nil || !strings.Contains(err.Error(), "flow_start") {
+		t.Fatalf("want flow_start guard, got %v", err)
 	}
-	typed := s.types[len(s.types)-1]
-	if !strings.Contains(typed, kit.ConsoleMarkerPrefix) {
-		return []byte(typed), nil
-	}
-	marker := ""
-	if i := strings.Index(typed, "echo "); i >= 0 {
-		marker = strings.TrimSpace(typed[i+len("echo "):])
-	}
-	return []byte(typed + "\nkernel 6.12.0-omarchy\n" + marker + "\n"), nil
-}
-func (s *shellTransport) PressKey(_ context.Context, k string) error {
-	s.keys = append(s.keys, k)
-	return nil
-}
-func (s *shellTransport) PressCombo(_ context.Context, c string) error {
-	s.keys = append(s.keys, "combo:"+c)
-	return nil
-}
-func (s *shellTransport) Type(_ context.Context, t string) error {
-	s.types = append(s.types, t)
-	return nil
-}
-
-var _ kit.ConsoleTransport = (*shellTransport)(nil)
-
-// sessionForFromTransport builds a session over an injected transport (test-only
-// seam), mirroring sessionFor without a device client.
-func sessionForFromTransport(tr kit.ConsoleTransport, sudoPassword string) *kit.ConsoleSession {
-	return &kit.ConsoleSession{
-		Transport:    tr,
-		SudoPassword: sudoPassword,
-		// Identity OCR over the scripted screen bytes, so the engine's marker
-		// logic is exercised without invoking tesseract.
-		OCR: func(b []byte) (string, error) { return string(b), nil },
+	if _, err := runFlow(context.Background(), nil, nil, &params.JetkvmInput{FlowStart: "a"}); err == nil || !strings.Contains(err.Error(), "flow_nodes") {
+		t.Fatalf("want flow_nodes guard, got %v", err)
 	}
 }

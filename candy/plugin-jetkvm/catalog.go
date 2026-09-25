@@ -89,7 +89,7 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 	case "install":
 		return runInstall(ctx, cl, op, in)
 	case "open-terminal":
-		return runOpenTerminal(ctx, cl, op, in, in.SudoPassword)
+		return runOpenTerminal(ctx, cl, op, in)
 	case "run-command":
 		return runCommands(ctx, cl, op, in, in.SudoPassword)
 	case "close-terminal":
