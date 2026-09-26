@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/opencharly/sdk v0.2026269.700
+	github.com/opencharly/sdk v0.2026269.1433
 	github.com/opencharly/spec v0.2026269.212
 	github.com/pion/rtcp v1.2.17
 	github.com/pion/rtp v1.10.5
