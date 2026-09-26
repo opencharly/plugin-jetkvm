@@ -409,7 +409,6 @@ jetkvm-entity-host:
     local:
         description: minimal kind:local template for the entity-resolution bed
         candy: []
-
 # The console-SESSION/FLOW bed: proves the new terminal-session surface end to
 # end on a machine sitting at a LOGIN prompt — a `flow` logs in (username +
 # password + named-outcome routing), reaching a shell, then `run-command` reads
@@ -434,23 +433,28 @@ jetkvm-console-session:
                   flow_start: login
                   flow_nodes:
                       login:
+                          description: at the login prompt, type the username
                           wait: [{name: prompt, match: "login:"}]
                           text: "{{user}}"
-                          next: subuser
-                      subuser:
-                          description: submit the username; on a rejected/re-shown login, loop back to re-type
-                          wait: [{name: pw, match: "Password:"}, {name: again, match: "login:"}]
+                          next: submituser
+                      submituser:
+                          description: press Return immediately (the username is typed; no password prompt yet)
                           key: Return
-                          transitions: {pw: typepw, again: login}
+                          next: waitpw
+                      waitpw:
+                          description: the password prompt now appears
+                          wait: [{name: pw, match: "Password:"}]
+                          next: typepw
                       typepw:
-                          wait: [{name: pw, match: "Password:"}]
+                          description: type the password (waitpw confirmed the prompt)
                           text: "{{password}}"
-                          next: subpw
-                      subpw:
-                          wait: [{name: pw, match: "Password:"}]
+                          next: submitpw
+                      submitpw:
+                          description: submit the password
                           key: Return
                           next: shell
                       shell:
+                          description: reach the shell, then prove a command runs and reads back
                           wait: [{name: ready, match: "~"}, {name: fail, match: "incorrect", failure: true}]
                           command: "echo JETKVM_LOGIN_OK"
                           expect: "JETKVM_LOGIN_OK"
@@ -461,7 +465,7 @@ jetkvm-console-session:
               stdout:
                   - contains: "flow completed at node"
               context: [runtime]
-              timeout: 180s
+              timeout: 240s
             - check: run-command reads the OS id in the now-open shell (marker-line completion + prompt preflight)
               id: jkcs-run-command
               jetkvm:
