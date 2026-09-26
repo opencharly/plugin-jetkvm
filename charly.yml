@@ -444,8 +444,8 @@ jetkvm-console-session:
                   flow_start: run
                   flow_nodes:
                       run:
-                          command: "echo JETKVM_FLOW_OK"
-                          expect: "JETKVM_FLOW_OK"
+                          command: "cat /etc/os-release | grep ^ID="
+                          expect: "omarchy"
                           timeout_sec: 30
               stdout:
                   - contains: "flow completed at node"
