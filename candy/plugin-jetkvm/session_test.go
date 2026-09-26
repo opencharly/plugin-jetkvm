@@ -57,9 +57,35 @@ func TestRunLUKSUnlock_RequiresPassphrase(t *testing.T) {
 	}
 }
 
-// TestRunBootOrder_GuardPaths pins the required-field guards on the boot-order
-// decode: an absent action, and a next/set missing its entry/sequence. These
-// fail before any terminal session.
+// TestSessionTerminalOpen_Decodes pins the open-terminal param→neutral mapping:
+// the default timeout, the authored combo/anchors/artifact, and the
+// first-command timeout override.
+func TestSessionTerminalOpen_Decodes(t *testing.T) {
+	// Default timeout (60) with no commands.
+	got := sessionTerminalOpen(&params.JetkvmInput{TerminalCombo: "ctrl+alt+F3", PromptAnchors: []string{"$"}, Artifact: "/tmp/a"})
+	if got.Combo != "ctrl+alt+F3" || len(got.PromptAnchors) != 1 || got.Artifact != "/tmp/a" || got.TimeoutSec != 60 {
+		t.Fatalf("open-terminal decode wrong: %+v", got)
+	}
+	// The first command's timeout_sec overrides the default.
+	got = sessionTerminalOpen(&params.JetkvmInput{Commands: []params.JetkvmSessionCommand{{TimeoutSec: 120}}})
+	if got.TimeoutSec != 120 {
+		t.Fatalf("first-command timeout not honored: %+v", got)
+	}
+}
+
+// TestSessionBootOrder_Decodes pins the boot-order param→neutral mapping,
+// including the schema-enum type conversion and the sudo password pass-through.
+func TestSessionBootOrder_Decodes(t *testing.T) {
+	got := sessionBootOrder(&params.JetkvmInput{
+		BootOrderAction: "set", BootOrderSequence: "0003,0001,0002", BootOrderCommand: "/usr/sbin/efibootmgr",
+	}, "hunter2")
+	if got.Action != "set" || got.Sequence != "0003,0001,0002" || got.Binary != "/usr/sbin/efibootmgr" || got.SudoPassword != "hunter2" {
+		t.Fatalf("boot-order decode wrong: %+v", got)
+	}
+}
+
+// TestRunBootOrder_Guards pins the required-field guards (checked before any
+// terminal session, so a nil transport is safe here).
 func TestRunBootOrder_Guards(t *testing.T) {
 	cases := []struct {
 		name string
@@ -72,9 +98,7 @@ func TestRunBootOrder_Guards(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := kit.RunBootOrder(context.Background(), nil, kit.BootOrder{
-				Action: string(tc.in.BootOrderAction), Entry: tc.in.BootOrderEntry, Sequence: tc.in.BootOrderSequence,
-			})
+			_, err := kit.RunBootOrder(context.Background(), nil, sessionBootOrder(tc.in, ""))
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want %q, got %v", tc.want, err)
 			}

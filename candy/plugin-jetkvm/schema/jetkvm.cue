@@ -79,12 +79,13 @@
 	// --- power / ATX / DC -------------------------------------------------
 	// action — the per-method action verb. It is a CUE enum of every action the
 	// catalog accepts ACROSS the action-bearing methods (power, dc-power,
-	// virtual-media, set-video, set-display, set-audio), so a typo is rejected at
-	// validate time and the valid verbs are generated into the docs. The
-	// method-SPECIFIC subset (e.g. `power` accepts only power-short/power-long/
-	// reset) is enforced at dispatch, because a single shared field cannot carry
-	// per-method disjunctions without degrading `cue exp gengotypes` (SDD — see
-	// #JetkvmAction's note).
+	// virtual-media, set-video, set-display), so a typo is rejected at validate
+	// time and the valid verbs are generated into the docs. The method-SPECIFIC
+	// subset (e.g. `power` accepts only power-short/power-long/reset) is enforced
+	// at dispatch, because a single shared field cannot carry per-method
+	// disjunctions without degrading `cue exp gengotypes` (SDD — see
+	// #JetkvmAction's note). Methods that do NOT take an action (set-audio,
+	// set-network, …) carry their own scalar fields instead.
 	action?: #JetkvmAction
 
 	// --- virtual media ----------------------------------------------------

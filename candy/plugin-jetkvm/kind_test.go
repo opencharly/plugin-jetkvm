@@ -111,7 +111,7 @@ func TestWakeHostIsMutating(t *testing.T) {
 // classification DELIBERATE and prevents a future silent addition to the
 // read-only set.
 func TestSessionMethodsAreMutating(t *testing.T) {
-	for _, m := range []string{"open-terminal", "run-command", "close-terminal", "luks-unlock"} {
+	for _, m := range []string{"open-terminal", "run-command", "close-terminal", "luks-unlock", "flow", "boot-order"} {
 		if readOnlyMethods[m] {
 			t.Fatalf("%s must NOT be read-only (it drives the controlled machine's input)", m)
 		}
