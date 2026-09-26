@@ -74,7 +74,7 @@ func TestSessionTerminalOpen_Decodes(t *testing.T) {
 }
 
 // TestSessionBootOrder_Decodes pins the boot-order param→neutral mapping,
-// including the schema-enum type conversion and the sudo password pass-through.
+// and the sudo password pass-through.
 func TestSessionBootOrder_Decodes(t *testing.T) {
 	got := sessionBootOrder(&params.JetkvmInput{
 		BootOrderAction: "set", BootOrderSequence: "0003,0001,0002", BootOrderCommand: "/usr/sbin/efibootmgr",

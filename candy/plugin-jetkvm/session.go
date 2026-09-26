@@ -126,10 +126,11 @@ func runLUKSUnlock(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *p
 	return kit.LUKSUnlock(ctx, sessionTransport(cl, op), in.Passphrase, in.Outcomes, nil, 120, in.Artifact)
 }
 
-// runBootOrder decodes `boot-order` into the shared action.
 // sessionBootOrder decodes the authored fields into the neutral BootOrder.
-// PURE, so the param→neutral mapping (including the type conversion of the
-// schema enum) is unit-locked without a device.
+// PURE, so the param→neutral mapping (including the sudo password pass-through)
+// is unit-locked without a device. BootOrderAction is generated as a plain
+// string (an inline CUE union), so the string(...) below is a straight copy, not
+// an enum conversion.
 func sessionBootOrder(in *params.JetkvmInput, sudoPassword string) kit.BootOrder {
 	return kit.BootOrder{
 		Action:       string(in.BootOrderAction),
