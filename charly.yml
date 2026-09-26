@@ -409,15 +409,14 @@ jetkvm-entity-host:
     local:
         description: minimal kind:local template for the entity-resolution bed
         candy: []
-# The console-SESSION/FLOW bed: proves the new terminal-session surface end to
-# end on a machine sitting at a LOGIN prompt — a `flow` logs in (username +
-# password + named-outcome routing), reaching a shell, then `run-command` reads
-# the OS id by OCR (marker-line completion, with prompt preflight) in that shell.
-# NON-DESTRUCTIVE (reads only). Credentials come from the host environment via
-# `answers_env` (never committed).
+# The console-SESSION/FLOW bed: proves the new terminal-session surface against a
+# machine ALREADY LOGGED IN at a shell prompt (an Omarchy TTY) — `run-command`
+# (marker-line completion + OCR readback, with prompt preflight) and `flow`
+# (named outcomes + routing + a command action). NON-DESTRUCTIVE (reads only).
+# Log in to the console first (a separate, operator action); `open-terminal` is
+# not used here because a bare Linux console has no GUI terminal to open.
 #
 #   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
-#     OMARCHY_KVM_USER=omarchy OMARCHY_KVM_PASSWORD=<pw> \
 #     charly check run jetkvm-console-session
 jetkvm-console-session:
     local:
@@ -425,48 +424,7 @@ jetkvm-console-session:
         host: local
         disposable: true
         plan:
-            - check: a flow logs in (named outcomes + routing) and reaches a shell
-              id: jkcs-login
-              jetkvm:
-                  method: flow
-                  allow_control: true
-                  flow_start: login
-                  flow_nodes:
-                      login:
-                          description: at the login prompt, type the username
-                          wait: [{name: prompt, match: "login:"}]
-                          text: "{{user}}"
-                          next: submituser
-                      submituser:
-                          description: press Return immediately (the username is typed; no password prompt yet)
-                          key: Return
-                          next: waitpw
-                      waitpw:
-                          description: the password prompt now appears
-                          wait: [{name: pw, match: "Password:"}]
-                          next: typepw
-                      typepw:
-                          description: type the password (waitpw confirmed the prompt)
-                          text: "{{password}}"
-                          next: submitpw
-                      submitpw:
-                          description: submit the password
-                          key: Return
-                          next: shell
-                      shell:
-                          description: reach the shell, then prove a command runs and reads back
-                          wait: [{name: ready, match: "~"}, {name: fail, match: "incorrect", failure: true}]
-                          command: "echo JETKVM_LOGIN_OK"
-                          expect: "JETKVM_LOGIN_OK"
-                          timeout_sec: 60
-                  answers_env:
-                      user: OMARCHY_KVM_USER
-                      password: OMARCHY_KVM_PASSWORD
-              stdout:
-                  - contains: "flow completed at node"
-              context: [runtime]
-              timeout: 240s
-            - check: run-command reads the OS id in the now-open shell (marker-line completion + prompt preflight)
+            - check: run-command with prompt preflight types into a real shell and reads the result by OCR (marker-line completion)
               id: jkcs-run-command
               jetkvm:
                   method: run-command
@@ -476,6 +434,22 @@ jetkvm-console-session:
                       - command: "cat /etc/os-release | grep ^ID="
                         expect: "omarchy"
                         timeout_sec: 30
+              context: [runtime]
+              timeout: 90s
+            - check: a flow routes on named outcomes and runs a command, reading its output (continuous OCR + case/switch + marker completion)
+              id: jkcs-flow
+              jetkvm:
+                  method: flow
+                  allow_control: true
+                  flow_start: shell
+                  flow_nodes:
+                      shell:
+                          wait: [{name: ready, match: "~"}]
+                          command: "echo JETKVM_FLOW_OK"
+                          expect: "JETKVM_FLOW_OK"
+                          timeout_sec: 30
+              stdout:
+                  - contains: "flow completed at node"
               context: [runtime]
               timeout: 90s
 
