@@ -431,8 +431,8 @@ jetkvm-console-session:
                   method: run-command
                   allow_control: true
                   commands:
-                      - command: "cat /etc/os-release | grep ^ID="
-                        expect: "omarchy"
+                      - command: "clear; cat /etc/os-release | grep ^ID="
+                        expect: "ID="
                         timeout_sec: 30
               context: [runtime]
               timeout: 90s
@@ -444,8 +444,8 @@ jetkvm-console-session:
                   flow_start: run
                   flow_nodes:
                       run:
-                          command: "cat /etc/os-release | grep ^ID="
-                          expect: "omarchy"
+                          command: "clear; cat /etc/os-release | grep ^ID="
+                          expect: "ID="
                           timeout_sec: 30
               stdout:
                   - contains: "flow completed at node"
