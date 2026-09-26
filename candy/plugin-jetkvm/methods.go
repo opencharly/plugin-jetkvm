@@ -110,8 +110,8 @@ var requiredModifiers = map[string][]string{
 	"run-command":   {"commands"},
 	// luks-unlock is NOT listed: a passphrase is required, but it may arrive as
 	// either `passphrase:` or `passphrase_secret:` — CheckRequiredModifiers ANDs
-	// its fields, so an either/or requirement is enforced in runLUKSUnlock, which
-	// names both options in its error.
+	// its fields, so an either/or requirement is enforced downstream, in the
+	// shared kit.LUKSUnlock (which names both options in its error), not here.
 }
 
 // skipError marks a policy-gated skip (distinct from a device failure). The

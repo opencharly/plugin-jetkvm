@@ -115,3 +115,39 @@ func TestRunFlow_Guards(t *testing.T) {
 		t.Fatalf("want flow_nodes guard, got %v", err)
 	}
 }
+
+// closeFakeTransport records the exit/Return a close-terminal sends.
+type closeFakeTransport struct {
+	types []string
+	keys  []string
+}
+
+func (t *closeFakeTransport) Capture(context.Context) ([]byte, error) {
+	return []byte("prompt $ "), nil
+}
+func (t *closeFakeTransport) PressKey(_ context.Context, k string) error {
+	t.keys = append(t.keys, k)
+	return nil
+}
+func (t *closeFakeTransport) PressCombo(context.Context, string) error { return nil }
+func (t *closeFakeTransport) Type(_ context.Context, s string) error {
+	t.types = append(t.types, s)
+	return nil
+}
+
+// TestCloseTerminalOn_SendsExit proves the plugin wires `close-terminal` to the
+// shared action: it types `exit` and submits with Return.
+func TestCloseTerminalOn_SendsExit(t *testing.T) {
+	tr := &closeFakeTransport{}
+	if _, err := closeTerminalOn(context.Background(), tr); err != nil {
+		t.Fatalf("closeTerminalOn: %v", err)
+	}
+	if len(tr.types) != 1 || tr.types[0] != "exit" {
+		t.Fatalf("exit not typed: %v", tr.types)
+	}
+	if len(tr.keys) != 1 || tr.keys[0] != "Return" {
+		t.Fatalf("exit not submitted: %v", tr.keys)
+	}
+}
+
+var _ kit.ConsoleTransport = (*closeFakeTransport)(nil)

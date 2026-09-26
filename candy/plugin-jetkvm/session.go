@@ -110,7 +110,14 @@ func runCommands(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *par
 
 // runCloseTerminal decodes `close-terminal` into the shared action.
 func runCloseTerminal(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *params.JetkvmInput) (string, error) {
-	return kit.CloseTerminal(ctx, sessionTransport(cl, op))
+	return closeTerminalOn(ctx, sessionTransport(cl, op))
+}
+
+// closeTerminalOn is runCloseTerminal's injectable-transport half, so the
+// plugin's wiring of the shared CloseTerminal action is unit-testable with a
+// fake transport (no device).
+func closeTerminalOn(ctx context.Context, tr kit.ConsoleTransport) (string, error) {
+	return kit.CloseTerminal(ctx, tr)
 }
 
 // runLUKSUnlock decodes `luks-unlock` into the shared action. The passphrase was
