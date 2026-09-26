@@ -438,9 +438,10 @@ jetkvm-console-session:
                           text: "{{user}}"
                           next: subuser
                       subuser:
+                          description: submit the username; on a rejected/re-shown login, loop back to re-type
                           wait: [{name: pw, match: "Password:"}, {name: again, match: "login:"}]
                           key: Return
-                          transitions: {pw: typepw, again: typepw}
+                          transitions: {pw: typepw, again: login}
                       typepw:
                           wait: [{name: pw, match: "Password:"}]
                           text: "{{password}}"
