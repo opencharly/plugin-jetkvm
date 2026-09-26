@@ -409,3 +409,50 @@ jetkvm-entity-host:
     local:
         description: minimal kind:local template for the entity-resolution bed
         candy: []
+# The console-SESSION/FLOW bed: proves the new terminal-session surface against a
+# machine at a SHELL PROMPT — `run-command` (marker-line completion + OCR
+# readback) and `flow` (named outcomes + routing + a command action).
+# NON-DESTRUCTIVE (reads only). No `prompt_anchors` is authored: a shell prompt is
+# often a bare glyph (`~`, `❯`) that tesseract does NOT OCR, so the OCR-robust
+# completion signal is the MARKER LINE the shell echoes, not the prompt glyph. Log
+# in to the console first (a separate operator action).
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-console-session
+jetkvm-console-session:
+    local:
+        from: jetkvm-console-host
+        host: local
+        disposable: true
+        plan:
+            - check: run-command types into the shell and reads the OS id by OCR (marker-line completion)
+              id: jkcs-run-command
+              jetkvm:
+                  method: run-command
+                  allow_control: true
+                  commands:
+                      - command: "clear; cat /etc/os-release | grep ^ID="
+                        expect: "ID="
+                        timeout_sec: 30
+              context: [runtime]
+              timeout: 90s
+            - check: a flow runs a command and reads its output (marker-line completion; the node acts without a prompt-glyph wait)
+              id: jkcs-flow
+              jetkvm:
+                  method: flow
+                  allow_control: true
+                  flow_start: run
+                  flow_nodes:
+                      run:
+                          command: "clear; cat /etc/os-release | grep ^ID="
+                          expect: "ID="
+                          timeout_sec: 30
+              stdout:
+                  - contains: "flow completed at node"
+              context: [runtime]
+              timeout: 90s
+
+jetkvm-console-host:
+    local:
+        description: minimal kind:local template for the console-session bed
+        candy: []

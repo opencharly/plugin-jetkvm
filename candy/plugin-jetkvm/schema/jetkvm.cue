@@ -66,10 +66,10 @@
 	// from_x / from_y — drag start coordinates.
 	from_x?: int @go(FromX,type=int)
 	from_y?: int @go(FromY,type=int)
-	// button — pointer button (left/right/middle; default left). Used by `click`
-	// and `drag`. `move`/`mouse` are pure position moves and NEVER press a
-	// button, so a `button:` on them is validated but not sent.
-	button?: string
+	// button — pointer button (default left). Used by `click` and `drag`.
+	// `move`/`mouse` are pure position moves and NEVER press a button, so a
+	// `button:` on them is validated but not sent.
+	button?: "left" | "right" | "middle"
 	// scroll_x / scroll_y — wheel deltas (scroll).
 	scroll_x?: int @go(ScrollX,type=int)
 	scroll_y?: int @go(ScrollY,type=int)
@@ -77,9 +77,16 @@
 	macro?: [...#JetkvmMacroStep]
 
 	// --- power / ATX / DC -------------------------------------------------
-	// action — the power action: power-short | power-long | reset | on | off |
-	// restore-on | restore-off | restore-last.
-	action?: string
+	// action — the per-method action verb. It is a CUE enum of every action the
+	// catalog accepts ACROSS the action-bearing methods (power, dc-power,
+	// virtual-media, set-video, set-display), so a typo is rejected at validate
+	// time and the valid verbs are generated into the docs. The method-SPECIFIC
+	// subset (e.g. `power` accepts only power-short/power-long/reset) is enforced
+	// at dispatch, because a single shared field cannot carry per-method
+	// disjunctions without degrading `cue exp gengotypes` (SDD — see
+	// #JetkvmAction's note). Methods that do NOT take an action (set-audio,
+	// set-network, …) carry their own scalar fields instead.
+	action?: #JetkvmAction
 
 	// --- virtual media ----------------------------------------------------
 	// media_url — the HTTP(S) URL `virtual-media` mounts.
@@ -87,12 +94,11 @@
 	// media_file — the device-storage filename `virtual-media` mounts/deletes.
 	media_file?: string @go(MediaFile)
 	// media_mode — cdrom | disk.
-	media_mode?: string @go(MediaMode)
+	media_mode?: "cdrom" | "disk" @go(MediaMode)
 
 	// --- usb --------------------------------------------------------------
-	// usb_device — absolute_mouse | relative_mouse | keyboard | mass_storage |
-	// serial_console | audio.
-	usb_device?: string @go(UsbDevice)
+	// usb_device — the virtual USB device class to enable/disable.
+	usb_device?: "absolute_mouse" | "relative_mouse" | "keyboard" | "mass_storage" | "serial_console" | "audio" @go(UsbDevice)
 	// usb_enabled — enable/disable the addressed usb_device (or the whole
 	// emulation bus for `usb-emulation`).
 	usb_enabled?: bool @go(UsbEnabled)
@@ -153,6 +159,94 @@
 	// resolves to it, with nothing machine-specific committed. Precedence:
 	// answers (authored) > answer_secrets > answers_env.
 	answers_env?: {[string]: string} @go(AnswersEnv)
+
+	// --- console terminal session (open / run / close / LUKS) -------------
+	// `open-terminal`, `run-command`, `close-terminal` and `luks-unlock` drive
+	// an INTERACTIVE shell (or the initramfs prompt) on the controlled machine,
+	// reading each result by OCR. They share the transport-agnostic
+	// kit.ConsoleSession engine, so the same methods serve the JetKVM and SPICE
+	// transports (R3). The command COMPLETION is detected by an opaque marker the
+	// shell echoes (never a prompt substring, which the terminal echo would
+	// satisfy before the command ran — the RCA behind the marker design).
+	//
+	// open-terminal opens a terminal: it sends `terminal_combo` (default
+	// "super+Return", Omarchy's terminal hotkey; use "ctrl+alt+F3" for a bare
+	// text TTY) and OCR-waits for one of `prompt_anchors` (the shell prompt).
+	// run-command runs `commands` in the open terminal, OCR-reading each result;
+	// with `close_terminal: true` it exits afterwards. close-terminal exits an
+	// open terminal (`exit`). luks-unlock types `passphrase` / its secret and
+	// waits for one of `outcomes` (the boot proceeding, an error, a login).
+	//
+	// terminal_combo — the chord `open-terminal` sends (default "super+Return").
+	terminal_combo?: string @go(TerminalCombo)
+	// prompt_anchors — the substrings that mean a terminal is ready. Default
+	// ["$", "#", ">"] (the common shell prompts). Screen-unique enough for the
+	// readiness wait; override for an unusual prompt.
+	prompt_anchors?: [...string] @go(PromptAnchors)
+	// commands — the ordered commands `run-command` executes.
+	commands?: [...#JetkvmSessionCommand] @go(Commands)
+	// close_terminal — when true, `run-command` exits the terminal after the last
+	// command (a convenience so one step opens, runs and closes).
+	close_terminal?: bool @go(CloseTerminal)
+	// sudo_password — the password `run-command` types at a sudo prompt. Prefer
+	// sudo_password_secret (the credential store); this literal exists for
+	// ad-hoc/CI use and is never required when no command is `sudo: true`.
+	sudo_password?: string @go(SudoPassword)
+	// sudo_password_secret — the credential-store key holding the sudo password.
+	sudo_password_secret?: string @go(SudoPasswordSecret)
+	// passphrase — the LUKS/disk-encryption passphrase `luks-unlock` types.
+	// Prefer passphrase_secret.
+	passphrase?: string
+	// passphrase_secret — the credential-store key holding the LUKS passphrase.
+	passphrase_secret?: string @go(PassphraseSecret)
+	// outcomes — the SUCCESS anchors `luks-unlock` waits for (the boot
+	// proceeding, a login prompt). A wrong passphrase is caught by a built-in
+	// failure anchor set and FAILS the step, so this only names success.
+	outcomes?: [...string] @go(Outcomes)
+
+	// --- console FLOW (continuous OCR + if/then/else + case/switch + while) --
+	// The `flow` method drives a BOUNDED STATE MACHINE over the console: each
+	// node OCR-polls CONTINUOUSLY (never a guessed timeout) until one of its
+	// NAMED outcomes appears, sends its action, then routes to the next node by
+	// the OBSERVED outcome. A transition back to an earlier node is a while
+	// loop, bounded by max_loops/max_steps so it can never spin forever.
+	//
+	// flow_start — the entry node id.
+	flow_start?: string @go(FlowStart)
+	// flow_nodes — id -> node. Each node: a `wait` list of named outcomes, an
+	// optional `action`, `transitions` (outcome -> next id) for if/then/else and
+	// case/switch, and a default `next`.
+	flow_nodes?: {[string]: #JetkvmFlowNode} @go(FlowNodes)
+	// flow_max_steps / flow_max_loops — the loop bounds (defaults 200 / 50).
+	flow_max_steps?: int & >=1 @go(FlowMaxSteps,type=int)
+	flow_max_loops?: int & >=1 @go(FlowMaxLoops,type=int)
+	// flow_resume — when true, AUTO-DETECT the node whose wait matches the
+	// CURRENT screen and start there, so a re-run after a stall/restart recovers
+	// to the right step instead of replaying from `flow_start`.
+	flow_resume?: bool @go(FlowResume)
+	// flow_resume_order — the node ids EARLIEST→LATEST; when a screen matches
+	// several nodes, the latest-listed match is the resume point (disambiguates).
+	flow_resume_order?: [...string] @go(FlowResumeOrder)
+
+	// --- boot order (EFI boot manager, target-side over the terminal) ------
+	// `boot-order` sets the UEFI boot order from INSIDE the running system, using
+	// the EFI boot manager `efibootmgr` in an open terminal — the OS-side
+	// counterpart to pressing the firmware boot-menu key (F11/F12). Actions:
+	//   list — run `efibootmgr` and return the entries (BootCurrent/BootOrder/
+	//          BootNNNN lines) read by OCR.
+	//   next — one-time next boot: `efibootmgr --bootnext <entry>` (does NOT
+	//          change the persistent order; ideal for booting an installer medium
+	//          once, then returning to the disk).
+	//   set  — persist the order: `efibootmgr --bootorder <sequence>`.
+	boot_order_action?: "list" | "next" | "set" @go(BootOrderAction)
+	// boot_order_entry — the entry number for action: next (e.g. "0003").
+	boot_order_entry?: string @go(BootOrderEntry)
+	// boot_order_sequence — the comma-separated entry order for action: set
+	// (e.g. "0003,0001,0002").
+	boot_order_sequence?: string @go(BootOrderSequence)
+	// boot_order_command — overrides the boot-manager binary (default
+	// "efibootmgr"), for a system that names it differently.
+	boot_order_command?: string @go(BootOrderCommand)
 
 	// --- artifact ---------------------------------------------------------
 	// artifact — the host path `screenshot` writes the PNG to.
@@ -224,6 +318,115 @@
 	artifact?: string
 	// description — optional human label for the step's evidence line.
 	description?: string @go(Description)
+}
+
+// #JetkvmAction — the union of every action verb the action-bearing methods
+// accept. It is the CUE-expressible half of the action contract: the SET of legal
+// verbs is enforced here at validate time (a typo fails before any device call).
+//
+// WHY NOT A PER-METHOD DISJUNCTION (SDD): the natural shape would be one action
+// field carrying `if method == "power" { action: "power-short" | ... }` rules.
+// That is INEXPRESSIBLE without degrading `cue exp gengotypes`: a conditional
+// that constrains a field to a method-specific set evaluates with `method` still
+// abstract, every branch stays unresolved, and the generator emits the WHOLE
+// struct as `any` (measured — the same limitation documented at
+// spec/schema/vm.cue's #LibvirtGraphics note). The method-SPECIFIC subset is
+// therefore enforced at dispatch, which is also where the error can name the
+// method. The union below keeps the generator healthy.
+#JetkvmAction: string &
+	// ATX power (methodPower)
+	"power-short" |
+	"power-long" |
+	"reset" |
+	// DC power (methodDCPower)
+	"on" |
+	"off" |
+	"restore-on" |
+	"restore-off" |
+	"restore-last" |
+	// virtual media (methodVirtualMedia)
+	"mount-url" |
+	"mount-storage" |
+	"unmount" |
+	"delete" |
+	// set-video (methodSetVideo)
+	"codec" |
+	"quality" |
+	"sleep" |
+	"paused" |
+	// set-display (methodSetDisplay)
+	"rotation" |
+	"backlight"
+
+// #JetkvmSessionCommand — ONE command the `run-command` method runs in an OPEN
+// terminal session, reading its result by OCR.
+#JetkvmSessionCommand: {
+	// command — the shell command line to run.
+	command: string & !="" @go(Command)
+	// sudo — run through sudo (prefixed with `sudo `), entering the session's
+	// sudo password at the prompt when the target asks for it.
+	sudo?: bool @go(Sudo)
+	// expect — optional substring that MUST appear in the OCR-read result; when
+	// set and absent the command fails naming what was read. It is the
+	// assertion half of "read the results via OCR".
+	expect?: string @go(Expect)
+	// timeout_sec — how long to wait for the completion marker (default 120).
+	timeout_sec?: int & >=1 @go(TimeoutSec,type=int)
+	// artifact — optional host path the completion frame is written to.
+	artifact?: string
+	// description — optional human label.
+	description?: string @go(Description)
+}
+
+// #JetkvmFlowOutcome — ONE named condition a flow node waits for. The engine
+// OCR-polls continuously until any outcome's `match` substring is on screen.
+#JetkvmFlowOutcome: {
+	// name — the outcome identifier, keyed in a node's `transitions`.
+	name: string & !="" @go(Name)
+	// match — the case-insensitive OCR substring that identifies this outcome
+	// (omit when the outcome is a `reference:` screen match).
+	match?: string @go(Match)
+	// reference — a host path to a PREVIOUSLY-CAPTURED screenshot of this screen.
+	// The outcome matches by SCREEN FINGERPRINT (a perceptual hash) instead of
+	// OCR, so a screen that OCRs badly (a firmware menu, a graphical lock) is
+	// still recognisable, and an action can be triggered when the current screen
+	// matches the reference.
+	reference?: string @go(Reference)
+	// max_distance — the Hamming threshold for a `reference:` match (0..64;
+	// default 5). Higher tolerates more rendering difference.
+	max_distance?: int & >=0 & <=64 @go(MaxDistance,type=int)
+	// failure — marks a failure outcome (a wrong-passphrase / error screen). It
+	// fails the flow unless a `transitions` entry routes it (a recovery branch).
+	failure?: bool @go(Failure)
+}
+
+// #JetkvmFlowNode — ONE state of a console flow. It OCR-polls for a `wait`
+// outcome, sends `action`, then routes by the observed outcome.
+#JetkvmFlowNode: {
+	// description — optional human label for the evidence line.
+	description?: string @go(Description)
+	// wait — the named outcomes to OCR-poll for. Empty = act immediately.
+	wait?: [...#JetkvmFlowOutcome] @go(Wait)
+	// action — what to send once a wait matched (or immediately). At most one of
+	// the fields is used.
+	key?: string @go(Key)
+	combo?: string @go(Combo)
+	text?: string @go(Text)
+	// command / sudo / expect — run a shell command in the OPEN terminal and read
+	// its output by OCR (the same marker-completed path as `run-command`).
+	command?: string @go(Command)
+	sudo?: bool @go(Sudo)
+	expect?: string @go(Expect)
+	close_terminal?: bool @go(CloseTerminal)
+	// transitions — outcome name -> next node id (if/then/else, case/switch). A
+	// matched outcome with no entry falls through to `next`.
+	transitions?: {[string]: string} @go(Transitions)
+	// next — the default target when the matched outcome has no transition.
+	next?: string @go(Next)
+	// artifact — optional host path saving the frame captured at this node.
+	artifact?: string
+	// timeout_sec — bounds this node's OCR poll (default 120).
+	timeout_sec?: int & >=1 @go(TimeoutSec,type=int)
 }
 
 // #JetkvmDeviceInput — the authored `kind: jetkvm` DEVICE entity body. It is
@@ -314,6 +517,18 @@
 	"drag" |
 	// installer (mutating: it drives keyboard input over a recipe)
 	"install" |
+	// console terminal session (mutating: opens a terminal and drives input)
+	"open-terminal" |
+	"run-command" |
+	"close-terminal" |
+	// LUKS/disk-encryption passphrase entry at the initramfs prompt (mutating)
+	"luks-unlock" |
+	// console FLOW: continuous OCR-until-condition with named outcomes + control
+	// flow (if/then/else, case/switch, bounded while) (mutating)
+	"flow" |
+	// boot order: set the UEFI boot order from inside the running system via the
+	// EFI boot manager (efibootmgr) over the terminal (mutating)
+	"boot-order" |
 	// power (mutating)
 	"power" |
 	"dc-power" |

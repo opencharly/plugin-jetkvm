@@ -195,3 +195,58 @@ func TestReadOnlyAndRefusedDoNotOverlap(t *testing.T) {
 		}
 	}
 }
+
+// TestActionEnumCoversEveryActionBearingMethod asserts the #JetkvmAction CUE enum
+// is a SUPERSET of every verb the action-bearing methods accept, so the
+// validate-time narrowing (`action?: string` -> `#JetkvmAction`) cannot reject a
+// verb the code supports. The accepted verbs are read from PRODUCTION (the
+// `case ...` arms of methodPower/methodDCPower/methodVirtualMedia/methodSetVideo/
+// methodSetDisplay in catalog.go), and the enum is read from the schema — neither
+// is restated.
+func TestActionEnumCoversEveryActionBearingMethod(t *testing.T) {
+	src, err := os.ReadFile("catalog.go")
+	if err != nil {
+		t.Fatalf("read catalog: %v", err)
+	}
+	code := string(src)
+	// The enum verbs.
+	enumBlock := regexp.MustCompile(`(?s)#JetkvmAction: string &(.*?)\n\n`).FindString(readSchema(t))
+	enum := map[string]bool{}
+	for _, m := range regexp.MustCompile(`"([a-z-]+)"`).FindAllStringSubmatch(enumBlock, -1) {
+		enum[m[1]] = true
+	}
+	// The verbs each action-bearing method accepts, from its `case "a", "b":` arms.
+	methods := []string{"methodPower", "methodDCPower", "methodVirtualMedia", "methodSetVideo", "methodSetDisplay"}
+	accepted := map[string]bool{}
+	for _, fn := range methods {
+		body := regexp.MustCompile(`(?s)func ` + fn + `\(.*?\n\}`).FindString(code)
+		if body == "" {
+			t.Fatalf("could not locate %s in catalog.go", fn)
+		}
+		for _, m := range regexp.MustCompile(`case ([^:]+):`).FindAllStringSubmatch(body, -1) {
+			for _, part := range strings.Split(m[1], ",") {
+				name := strings.Trim(strings.TrimSpace(part), `"`)
+				if name != "" && !strings.Contains(name, " ") && name != "default" {
+					accepted[name] = true
+				}
+			}
+		}
+	}
+	if len(accepted) == 0 {
+		t.Fatal("parsed no accepted action verbs — the parser is broken")
+	}
+	for v := range accepted {
+		if !enum[v] {
+			t.Errorf("#JetkvmAction is missing %q, which an action-bearing method accepts — the enum narrowing would reject a valid value", v)
+		}
+	}
+}
+
+func readSchema(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("schema/jetkvm.cue")
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	return string(b)
+}

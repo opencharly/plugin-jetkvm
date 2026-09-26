@@ -100,6 +100,25 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 			})
 	}
 
+	// Resolve the session secrets (the sudo password and the LUKS passphrase) the
+	// SAME way the device password is (R3): an authored literal wins, otherwise the
+	// credential-store key named by *_secret is read over the reverse channel — so
+	// neither secret ever appears in charly.yml.
+	if in.SudoPassword == "" && in.SudoPasswordSecret != "" {
+		v, err := resolveSecret(ctx, req.GetExecutorBrokerId(), "", in.SudoPasswordSecret)
+		if err != nil {
+			return sdk.ResultJSON("fail", "jetkvm: "+err.Error())
+		}
+		in.SudoPassword = v
+	}
+	if in.Passphrase == "" && in.PassphraseSecret != "" {
+		v, err := resolveSecret(ctx, req.GetExecutorBrokerId(), "", in.PassphraseSecret)
+		if err != nil {
+			return sdk.ResultJSON("fail", "jetkvm: "+err.Error())
+		}
+		in.Passphrase = v
+	}
+
 	// Resolve the device address: the authored host first, then the
 	// JETKVM_HOST environment variable, then the deploy venue's address when the
 	// step omitted it (the "connect to whatever this deployment is" shape). No

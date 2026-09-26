@@ -88,6 +88,18 @@ func runMethod(ctx context.Context, cl *kvmclient.Client, op *spec.Op, in *param
 		return methodType(ctx, cl, in)
 	case "install":
 		return runInstall(ctx, cl, op, in)
+	case "open-terminal":
+		return runOpenTerminal(ctx, cl, op, in)
+	case "run-command":
+		return runCommands(ctx, cl, op, in, in.SudoPassword)
+	case "close-terminal":
+		return runCloseTerminal(ctx, cl, op, in)
+	case "luks-unlock":
+		return runLUKSUnlock(ctx, cl, op, in)
+	case "flow":
+		return runFlow(ctx, cl, op, in)
+	case "boot-order":
+		return runBootOrder(ctx, cl, op, in, in.SudoPassword)
 	case "click", "mouse", "move":
 		return methodPointer(ctx, cl, in)
 	case "scroll":
@@ -530,7 +542,7 @@ func methodDCPower(ctx context.Context, cl *kvmclient.Client, in *params.JetkvmI
 			return "", err
 		}
 	case "restore-on", "restore-off", "restore-last":
-		state := map[string]int{"restore-off": 0, "restore-on": 1, "restore-last": 2}[in.Action]
+		state := map[string]int{"restore-off": 0, "restore-on": 1, "restore-last": 2}[string(in.Action)]
 		if _, err := callSummary(ctx, cl, "setDCRestoreState", map[string]any{"state": state}); err != nil {
 			return "", err
 		}

@@ -83,9 +83,9 @@ type JetkvmInput struct {
 
 	FromY int `yaml:"from_y,omitempty" json:"from_y,omitempty"`
 
-	// button — pointer button (left/right/middle; default left). Used by `click`
-	// and `drag`. `move`/`mouse` are pure position moves and NEVER press a
-	// button, so a `button:` on them is validated but not sent.
+	// button — pointer button (default left). Used by `click` and `drag`.
+	// `move`/`mouse` are pure position moves and NEVER press a button, so a
+	// `button:` on them is validated but not sent.
 	Button string `yaml:"button,omitempty" json:"button,omitempty"`
 
 	// scroll_x / scroll_y — wheel deltas (scroll).
@@ -97,9 +97,16 @@ type JetkvmInput struct {
 	Macro []JetkvmMacroStep `yaml:"macro,omitempty" json:"macro,omitempty"`
 
 	// --- power / ATX / DC -------------------------------------------------
-	// action — the power action: power-short | power-long | reset | on | off |
-	// restore-on | restore-off | restore-last.
-	Action string `yaml:"action,omitempty" json:"action,omitempty"`
+	// action — the per-method action verb. It is a CUE enum of every action the
+	// catalog accepts ACROSS the action-bearing methods (power, dc-power,
+	// virtual-media, set-video, set-display), so a typo is rejected at validate
+	// time and the valid verbs are generated into the docs. The method-SPECIFIC
+	// subset (e.g. `power` accepts only power-short/power-long/reset) is enforced
+	// at dispatch, because a single shared field cannot carry per-method
+	// disjunctions without degrading `cue exp gengotypes` (SDD — see
+	// #JetkvmAction's note). Methods that do NOT take an action (set-audio,
+	// set-network, …) carry their own scalar fields instead.
+	Action JetkvmAction `yaml:"action,omitempty" json:"action,omitempty"`
 
 	// --- virtual media ----------------------------------------------------
 	// media_url — the HTTP(S) URL `virtual-media` mounts.
@@ -112,8 +119,7 @@ type JetkvmInput struct {
 	MediaMode string `yaml:"media_mode,omitempty" json:"media_mode,omitempty"`
 
 	// --- usb --------------------------------------------------------------
-	// usb_device — absolute_mouse | relative_mouse | keyboard | mass_storage |
-	// serial_console | audio.
+	// usb_device — the virtual USB device class to enable/disable.
 	UsbDevice string `yaml:"usb_device,omitempty" json:"usb_device,omitempty"`
 
 	// usb_enabled — enable/disable the addressed usb_device (or the whole
@@ -185,6 +191,111 @@ type JetkvmInput struct {
 	// answers (authored) > answer_secrets > answers_env.
 	AnswersEnv map[string]string `yaml:"answers_env,omitempty" json:"answers_env,omitempty"`
 
+	// --- console terminal session (open / run / close / LUKS) -------------
+	// `open-terminal`, `run-command`, `close-terminal` and `luks-unlock` drive
+	// an INTERACTIVE shell (or the initramfs prompt) on the controlled machine,
+	// reading each result by OCR. They share the transport-agnostic
+	// kit.ConsoleSession engine, so the same methods serve the JetKVM and SPICE
+	// transports (R3). The command COMPLETION is detected by an opaque marker the
+	// shell echoes (never a prompt substring, which the terminal echo would
+	// satisfy before the command ran — the RCA behind the marker design).
+	//
+	// open-terminal opens a terminal: it sends `terminal_combo` (default
+	// "super+Return", Omarchy's terminal hotkey; use "ctrl+alt+F3" for a bare
+	// text TTY) and OCR-waits for one of `prompt_anchors` (the shell prompt).
+	// run-command runs `commands` in the open terminal, OCR-reading each result;
+	// with `close_terminal: true` it exits afterwards. close-terminal exits an
+	// open terminal (`exit`). luks-unlock types `passphrase` / its secret and
+	// waits for one of `outcomes` (the boot proceeding, an error, a login).
+	//
+	// terminal_combo — the chord `open-terminal` sends (default "super+Return").
+	TerminalCombo string `yaml:"terminal_combo,omitempty" json:"terminal_combo,omitempty"`
+
+	// prompt_anchors — the substrings that mean a terminal is ready. Default
+	// ["$", "#", ">"] (the common shell prompts). Screen-unique enough for the
+	// readiness wait; override for an unusual prompt.
+	PromptAnchors []string `yaml:"prompt_anchors,omitempty" json:"prompt_anchors,omitempty"`
+
+	// commands — the ordered commands `run-command` executes.
+	Commands []JetkvmSessionCommand `yaml:"commands,omitempty" json:"commands,omitempty"`
+
+	// close_terminal — when true, `run-command` exits the terminal after the last
+	// command (a convenience so one step opens, runs and closes).
+	CloseTerminal bool `yaml:"close_terminal,omitempty" json:"close_terminal,omitempty"`
+
+	// sudo_password — the password `run-command` types at a sudo prompt. Prefer
+	// sudo_password_secret (the credential store); this literal exists for
+	// ad-hoc/CI use and is never required when no command is `sudo: true`.
+	SudoPassword string `yaml:"sudo_password,omitempty" json:"sudo_password,omitempty"`
+
+	// sudo_password_secret — the credential-store key holding the sudo password.
+	SudoPasswordSecret string `yaml:"sudo_password_secret,omitempty" json:"sudo_password_secret,omitempty"`
+
+	// passphrase — the LUKS/disk-encryption passphrase `luks-unlock` types.
+	// Prefer passphrase_secret.
+	Passphrase string `yaml:"passphrase,omitempty" json:"passphrase,omitempty"`
+
+	// passphrase_secret — the credential-store key holding the LUKS passphrase.
+	PassphraseSecret string `yaml:"passphrase_secret,omitempty" json:"passphrase_secret,omitempty"`
+
+	// outcomes — the SUCCESS anchors `luks-unlock` waits for (the boot
+	// proceeding, a login prompt). A wrong passphrase is caught by a built-in
+	// failure anchor set and FAILS the step, so this only names success.
+	Outcomes []string `yaml:"outcomes,omitempty" json:"outcomes,omitempty"`
+
+	// --- console FLOW (continuous OCR + if/then/else + case/switch + while) --
+	// The `flow` method drives a BOUNDED STATE MACHINE over the console: each
+	// node OCR-polls CONTINUOUSLY (never a guessed timeout) until one of its
+	// NAMED outcomes appears, sends its action, then routes to the next node by
+	// the OBSERVED outcome. A transition back to an earlier node is a while
+	// loop, bounded by max_loops/max_steps so it can never spin forever.
+	//
+	// flow_start — the entry node id.
+	FlowStart string `yaml:"flow_start,omitempty" json:"flow_start,omitempty"`
+
+	// flow_nodes — id -> node. Each node: a `wait` list of named outcomes, an
+	// optional `action`, `transitions` (outcome -> next id) for if/then/else and
+	// case/switch, and a default `next`.
+	FlowNodes map[string]JetkvmFlowNode `yaml:"flow_nodes,omitempty" json:"flow_nodes,omitempty"`
+
+	// flow_max_steps / flow_max_loops — the loop bounds (defaults 200 / 50).
+	FlowMaxSteps int `yaml:"flow_max_steps,omitempty" json:"flow_max_steps,omitempty"`
+
+	FlowMaxLoops int `yaml:"flow_max_loops,omitempty" json:"flow_max_loops,omitempty"`
+
+	// flow_resume — when true, AUTO-DETECT the node whose wait matches the
+	// CURRENT screen and start there, so a re-run after a stall/restart recovers
+	// to the right step instead of replaying from `flow_start`.
+	FlowResume bool `yaml:"flow_resume,omitempty" json:"flow_resume,omitempty"`
+
+	// flow_resume_order — the node ids EARLIEST→LATEST; when a screen matches
+	// several nodes, the latest-listed match is the resume point (disambiguates).
+	FlowResumeOrder []string `yaml:"flow_resume_order,omitempty" json:"flow_resume_order,omitempty"`
+
+	// --- boot order (EFI boot manager, target-side over the terminal) ------
+	// `boot-order` sets the UEFI boot order from INSIDE the running system, using
+	// the EFI boot manager `efibootmgr` in an open terminal — the OS-side
+	// counterpart to pressing the firmware boot-menu key (F11/F12). Actions:
+	//
+	//	list — run `efibootmgr` and return the entries (BootCurrent/BootOrder/
+	//	       BootNNNN lines) read by OCR.
+	//	next — one-time next boot: `efibootmgr --bootnext <entry>` (does NOT
+	//	       change the persistent order; ideal for booting an installer medium
+	//	       once, then returning to the disk).
+	//	set  — persist the order: `efibootmgr --bootorder <sequence>`.
+	BootOrderAction string `yaml:"boot_order_action,omitempty" json:"boot_order_action,omitempty"`
+
+	// boot_order_entry — the entry number for action: next (e.g. "0003").
+	BootOrderEntry string `yaml:"boot_order_entry,omitempty" json:"boot_order_entry,omitempty"`
+
+	// boot_order_sequence — the comma-separated entry order for action: set
+	// (e.g. "0003,0001,0002").
+	BootOrderSequence string `yaml:"boot_order_sequence,omitempty" json:"boot_order_sequence,omitempty"`
+
+	// boot_order_command — overrides the boot-manager binary (default
+	// "efibootmgr"), for a system that names it differently.
+	BootOrderCommand string `yaml:"boot_order_command,omitempty" json:"boot_order_command,omitempty"`
+
 	// --- artifact ---------------------------------------------------------
 	// artifact — the host path `screenshot` writes the PNG to.
 	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
@@ -248,13 +359,34 @@ type JetkvmMacroStep struct {
 	Delay int64 `yaml:"delay,omitempty" json:"delay,omitempty"`
 }
 
+// #JetkvmAction — the union of every action verb the action-bearing methods
+// accept. It is the CUE-expressible half of the action contract: the SET of legal
+// verbs is enforced here at validate time (a typo fails before any device call).
+//
+// WHY NOT A PER-METHOD DISJUNCTION (SDD): the natural shape would be one action
+// field carrying `if method == "power" { action: "power-short" | ... }` rules.
+// That is INEXPRESSIBLE without degrading `cue exp gengotypes`: a conditional
+// that constrains a field to a method-specific set evaluates with `method` still
+// abstract, every branch stays unresolved, and the generator emits the WHOLE
+// struct as `any` (measured — the same limitation documented at
+// spec/schema/vm.cue's #LibvirtGraphics note). The method-SPECIFIC subset is
+// therefore enforced at dispatch, which is also where the error can name the
+// method. The union below keeps the generator healthy.
+type JetkvmAction string
+
 // #JetkvmInstallStep — ONE step of a console-installer recipe driven by the
 // `install` method. Each step OCR-waits for its `wait_for` anchor to appear on
-// the screen, then performs ONE input action. `wait_for` MUST be a
-// screen-UNIQUE string: a string present on every screen (e.g. a logo) passes
-// vacuously and desynchronises the whole drive.
+// the screen, then performs ONE input action.
+//
+// A REAL WIZARD recipe MUST use a screen-UNIQUE anchor per step: a string present
+// on every screen (e.g. a logo) passes vacuously and desynchronises the whole
+// drive. A single-step PROBE recipe whose only job is to prove the OCR read and
+// the transport's input may deliberately use a broad anchor — there is no next
+// step to desynchronise against — and the entity bed's `probe` recipe is exactly
+// that.
 type JetkvmInstallStep struct {
-	// wait_for — screen-unique text the step waits for before acting.
+	// wait_for — the text the step waits for before acting. Screen-unique for a
+	// multi-step wizard recipe; a single-step probe may use a broad anchor.
 	WaitFor string `yaml:"wait_for,omitempty" json:"wait_for"`
 
 	// action — the input to send once `wait_for` is on screen. Omitted means the
@@ -285,6 +417,98 @@ type JetkvmInstallStep struct {
 
 	// description — optional human label for the step's evidence line.
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// #JetkvmSessionCommand — ONE command the `run-command` method runs in an OPEN
+// terminal session, reading its result by OCR.
+type JetkvmSessionCommand struct {
+	// command — the shell command line to run.
+	Command string `yaml:"command,omitempty" json:"command"`
+
+	// sudo — run through sudo (prefixed with `sudo `), entering the session's
+	// sudo password at the prompt when the target asks for it.
+	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+
+	// expect — optional substring that MUST appear in the OCR-read result; when
+	// set and absent the command fails naming what was read. It is the
+	// assertion half of "read the results via OCR".
+	Expect string `yaml:"expect,omitempty" json:"expect,omitempty"`
+
+	// timeout_sec — how long to wait for the completion marker (default 120).
+	TimeoutSec int `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
+
+	// artifact — optional host path the completion frame is written to.
+	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+
+	// description — optional human label.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// #JetkvmFlowNode — ONE state of a console flow. It OCR-polls for a `wait`
+// outcome, sends `action`, then routes by the observed outcome.
+type JetkvmFlowNode struct {
+	// description — optional human label for the evidence line.
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	// wait — the named outcomes to OCR-poll for. Empty = act immediately.
+	Wait []JetkvmFlowOutcome `yaml:"wait,omitempty" json:"wait,omitempty"`
+
+	// action — what to send once a wait matched (or immediately). At most one of
+	// the fields is used.
+	Key string `yaml:"key,omitempty" json:"key,omitempty"`
+
+	Combo string `yaml:"combo,omitempty" json:"combo,omitempty"`
+
+	Text string `yaml:"text,omitempty" json:"text,omitempty"`
+
+	// command / sudo / expect — run a shell command in the OPEN terminal and read
+	// its output by OCR (the same marker-completed path as `run-command`).
+	Command string `yaml:"command,omitempty" json:"command,omitempty"`
+
+	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+
+	Expect string `yaml:"expect,omitempty" json:"expect,omitempty"`
+
+	CloseTerminal bool `yaml:"close_terminal,omitempty" json:"close_terminal,omitempty"`
+
+	// transitions — outcome name -> next node id (if/then/else, case/switch). A
+	// matched outcome with no entry falls through to `next`.
+	Transitions map[string]string `yaml:"transitions,omitempty" json:"transitions,omitempty"`
+
+	// next — the default target when the matched outcome has no transition.
+	Next string `yaml:"next,omitempty" json:"next,omitempty"`
+
+	// artifact — optional host path saving the frame captured at this node.
+	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+
+	// timeout_sec — bounds this node's OCR poll (default 120).
+	TimeoutSec int `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
+}
+
+// #JetkvmFlowOutcome — ONE named condition a flow node waits for. The engine
+// OCR-polls continuously until any outcome's `match` substring is on screen.
+type JetkvmFlowOutcome struct {
+	// name — the outcome identifier, keyed in a node's `transitions`.
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// match — the case-insensitive OCR substring that identifies this outcome
+	// (omit when the outcome is a `reference:` screen match).
+	Match string `yaml:"match,omitempty" json:"match,omitempty"`
+
+	// reference — a host path to a PREVIOUSLY-CAPTURED screenshot of this screen.
+	// The outcome matches by SCREEN FINGERPRINT (a perceptual hash) instead of
+	// OCR, so a screen that OCRs badly (a firmware menu, a graphical lock) is
+	// still recognisable, and an action can be triggered when the current screen
+	// matches the reference.
+	Reference string `yaml:"reference,omitempty" json:"reference,omitempty"`
+
+	// max_distance — the Hamming threshold for a `reference:` match (0..64;
+	// default 5). Higher tolerates more rendering difference.
+	MaxDistance int `yaml:"max_distance,omitempty" json:"max_distance,omitempty"`
+
+	// failure — marks a failure outcome (a wrong-passphrase / error screen). It
+	// fails the flow unless a `transitions` entry routes it (a recovery branch).
+	Failure bool `yaml:"failure,omitempty" json:"failure,omitempty"`
 }
 
 // #JetkvmDeviceInput — the authored `kind: jetkvm` DEVICE entity body. It is
