@@ -409,3 +409,51 @@ jetkvm-entity-host:
     local:
         description: minimal kind:local template for the entity-resolution bed
         candy: []
+
+# The console-SESSION/FLOW bed: proves the new terminal-session surface against a
+# machine already at a shell prompt — `run-command` (marker-line completion + OCR
+# readback, with prompt preflight) and `flow` (named outcomes + routing + a
+# command action). NON-DESTRUCTIVE (reads only). It REQUIRES the controlled
+# machine to be logged in at a shell (an Omarchy TTY); `open-terminal` is not
+# used here because a bare Linux console has no GUI terminal to open.
+#
+#   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
+#     charly check run jetkvm-console-session
+jetkvm-console-session:
+    local:
+        from: jetkvm-console-host
+        host: local
+        disposable: true
+        plan:
+            - check: run-command with prompt preflight types into a real shell and reads the result by OCR (marker-line completion)
+              id: jkcs-run-command
+              jetkvm:
+                  method: run-command
+                  allow_control: true
+                  prompt_anchors: ["~", "#", "$"]
+                  commands:
+                      - command: "cat /etc/os-release | grep ^ID="
+                        expect: "omarchy"
+                        timeout_sec: 30
+              context: [runtime]
+              timeout: 90s
+            - check: a flow routes on named outcomes and runs a command, reading its output (continuous OCR + case/switch + marker completion)
+              id: jkcs-flow
+              jetkvm:
+                  method: flow
+                  allow_control: true
+                  flow_start: shell
+                  flow_nodes:
+                      shell:
+                          wait: [{name: ready, match: "~"}]
+                          command: "echo JETKVM_FLOW_OK"
+                          expect: "JETKVM_FLOW_OK"
+                          timeout_sec: 30
+              stdout:
+                  - contains: "flow completed at node"
+              context: [runtime]
+              timeout: 90s
+jetkvm-console-host:
+    local:
+        description: minimal kind:local template for the console-session bed
+        candy: []
