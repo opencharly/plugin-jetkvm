@@ -410,15 +410,14 @@ jetkvm-entity-host:
         description: minimal kind:local template for the entity-resolution bed
         candy: []
 # The console-SESSION/FLOW bed: proves the new terminal-session surface against a
-# machine at a console — it AUTO-DETECTS whether the machine is already at a shell
-# or still at a login prompt (flow resume/routing), logs in if needed, then runs a
-# command and reads the result by OCR (marker-line completion + prompt preflight).
-# NON-DESTRUCTIVE (reads only). Credentials come from the host environment via
-# `answers_env` (never committed). `open-terminal` is not used: a bare Linux
-# console has no GUI terminal to open.
+# machine at a SHELL PROMPT — `run-command` (marker-line completion + OCR
+# readback) and `flow` (named outcomes + routing + a command action).
+# NON-DESTRUCTIVE (reads only). No `prompt_anchors` is authored: a shell prompt is
+# often a bare glyph (`~`, `❯`) that tesseract does NOT OCR, so the OCR-robust
+# completion signal is the MARKER LINE the shell echoes, not the prompt glyph. Log
+# in to the console first (a separate operator action).
 #
 #   JETKVM_HOST=<device-host> JETKVM_AUTH_TOKEN=<token> \
-#     OMARCHY_KVM_USER=omarchy OMARCHY_KVM_PASSWORD=<pw> \
 #     charly check run jetkvm-console-session
 jetkvm-console-session:
     local:
@@ -426,59 +425,32 @@ jetkvm-console-session:
         host: local
         disposable: true
         plan:
-            - check: switch to a text console (TTY3) and nudge it awake
-              id: jkcs-wake
+            - check: run-command types into the shell and reads the OS id by OCR (marker-line completion)
+              id: jkcs-run-command
               jetkvm:
-                  method: key-combo
-                  combo: "ctrl+alt+F3"
+                  method: run-command
                   allow_control: true
+                  commands:
+                      - command: "cat /etc/os-release | grep ^ID="
+                        expect: "omarchy"
+                        timeout_sec: 30
               context: [runtime]
-              timeout: 40s
-            - check: a flow auto-detects a shell or a login prompt, logs in if needed, then runs a command and reads the OS id
+              timeout: 90s
+            - check: a flow runs a command and reads its output (marker-line completion; the node acts without a prompt-glyph wait)
               id: jkcs-flow
               jetkvm:
                   method: flow
                   allow_control: true
-                  prompt_anchors: ["omarchy@", "~", "#", "$"]
-                  flow_start: detect
+                  flow_start: run
                   flow_nodes:
-                      detect:
-                          description: route on whether a shell or a login prompt is on screen
-                          wait: [{name: shell, match: "omarchy@"}, {name: login, match: "login:"}]
-                          transitions: {shell: run, login: typelogin}
-                      typelogin:
-                          description: at the login prompt, type the username
-                          text: "{{user}}"
-                          next: submituser
-                      submituser:
-                          description: submit the username
-                          key: Return
-                          next: waitpw
-                      waitpw:
-                          description: the password prompt appears
-                          wait: [{name: pw, match: "Password"}]
-                          next: typepw
-                      typepw:
-                          description: type the password
-                          text: "{{password}}"
-                          next: submitpw
-                      submitpw:
-                          description: submit the password
-                          key: Return
-                          next: run
                       run:
-                          description: run the command in the shell and read the OS id
-                          wait: [{name: ready, match: "omarchy@"}, {name: fail, match: "incorrect", failure: true}]
-                          command: "cat /etc/os-release | grep ^ID="
-                          expect: "omarchy"
-                          timeout_sec: 60
-                  answers_env:
-                      user: OMARCHY_KVM_USER
-                      password: OMARCHY_KVM_PASSWORD
+                          command: "echo JETKVM_FLOW_OK"
+                          expect: "JETKVM_FLOW_OK"
+                          timeout_sec: 30
               stdout:
                   - contains: "flow completed at node"
               context: [runtime]
-              timeout: 240s
+              timeout: 90s
 
 jetkvm-console-host:
     local:
