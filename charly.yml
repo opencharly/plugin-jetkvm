@@ -5,7 +5,6 @@
 # including one with a malformed `plugin.providers` entry. Declaring discover:
 # is the whole fix: the candy is scanned, the CUE schema gate applies, and the
 # stock `charly box validate` step starts working with no workflow change.
-version: 2026.261.1747
 discover:
     - path: candy
       recursive: true
