@@ -1,7 +1,5 @@
-version: 2026.258.0220
 plugin-jetkvm:
     candy:
-        version: 2026.258.1200
         description: |-
             OUT-OF-TREE charly plugin serving the `jetkvm` IP-KVM verb AND the
             `kind: jetkvm` device entity — a standalone Go module (go.mod +
