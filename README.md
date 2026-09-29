@@ -1,12 +1,20 @@
 # plugin-jetkvm
 
-The OpenCharly plugin for **JetKVM** — drive a JetKVM IP-KVM from charly with no
-browser.
+The OpenCharly plugin for **JetKVM** — drive a [JetKVM](https://jetkvm.com)
+IP-KVM from charly with no browser.
 
 `jetkvm` is a declarative check/control **verb** served out-of-process by this
-plugin, exactly like `vnc:` / `adb:` / `cdp:`. Author it inside a candy or box
-`plan:` and run it against a live deployment with `charly check live`, or run the
-repo's own disposable beds with `charly check run`.
+plugin, exactly like `vnc:` / `adb:` / `cdp:`. It also serves a
+`kind: jetkvm` device entity. Author it inside a candy or box `plan:` and run it
+against a live deployment with `charly check live`, or run the repo's own
+disposable beds with `charly check run`.
+
+## What it provides
+
+| Capability | Surface |
+|---|---|
+| `verb:jetkvm` | the declarative `jetkvm:` check/control step |
+| `kind:jetkvm` | a `kind: jetkvm` device entity carrying an installer recipe |
 
 ```yaml
 - check: the JetKVM is reachable and its control channel answers
@@ -82,10 +90,7 @@ ungated escape hatch would be a bypass of the safety gate. It requires
 The authoritative catalog is `#JetkvmMethod` in `schema/jetkvm.cue`. Every
 method it allows is classified in `methods.go`: the read-only allowlist
 (`readOnlyMethods`), the never-autonomous set (`neverAutonomous`), and
-everything else as mutating. `dispatch` applies that classification BEFORE
-`runMethod` in `catalog.go` routes the method, which is why `factory-reset`
-and `update` appear in the schema catalog and the refusal lists but have no
-`runMethod` case — they can never reach it.
+everything else as mutating.
 
 Never autonomous: `factory-reset`, `update`.
 
@@ -95,27 +100,33 @@ device password to a `charly.yml`.
 
 Device address: author `host:` for an explicit device, or set **`JETKVM_HOST`**
 and author none — the provider falls back to the environment before the deploy
-venue. Using `JETKVM_HOST` keeps a device-specific hostname out of a committed
-plan, so a bed can be portable and carry no tailnet name.
-
-Input semantics: `move` and `mouse` are **pure position moves** — they never
-press a button, whether or not a `button:` is authored. `click` and `drag` press
-the button, which defaults to `left` when no `button:` is authored. So `move` and
-`click` need no `button:`.
+venue.
 
 Pointer coordinates: `x`/`y` (and `from_x`/`from_y`) are **absolute HID pointer
-coordinates in `[0,32767]`**, not desktop pixels. Convert a desktop pixel
-(`px`,`py`) on a `W`×`H` screen with `px*32767/(W-1)`, `py*32767/(H-1)` — the
-centre of a 1920×1080 screen is about `(16384,16384)`.
+coordinates in `[0,32767]`**, not desktop pixels. The centre of a 1920×1080
+screen is about `(16384,16384)`.
 
-Keyboard: `key` presses one named key; `key-combo` presses a chord. Both resolve
-over the common USB HID Keyboard/Keypad usages, so these names work — letters
-(`a`–`z`), digits (`0`–`9`), function keys (`F1`–`F12`), navigation and editing
-keys (`Enter`, `Escape`, `Tab`, arrows, `Home`, `End`, `PageUp`, `PageDown`,
-`Insert`, `Delete`, `Backspace`), punctuation, and modifier chords
-(`Control_L+Alt_L+Delete`, `ctrl+shift+t`). Names outside that set fail with
-`unknown key`. Separators are `+`, `-`, or whitespace; an uppercase letter or
-shifted symbol (`A`, `!`) implies Shift.
+## Console installer
+
+Beyond raw input, the plugin serves two higher-level capabilities: the read-only
+`ocr` method (capture + tesseract on the host + assert text — the
+wait-for-screen primitive), and the mutating `install` method, a configurable
+console-installer DRIVER that connects ONCE and walks an ordered `steps:` recipe,
+OCR-waiting for each screen-unique anchor before sending its key/type/combo
+input. The recipe is generic DATA supplied by a `kind: jetkvm` device entity, so
+one plugin drives any text-console installer with no per-distro code.
+
+## How to use it
+
+Compose the plugin candy in a box or check bed's `candy:` list:
+
+```yaml
+- '@github.com/opencharly/plugin-jetkvm/candy/plugin-jetkvm:<tag>'
+```
+
+The repo's own disposable beds (`jetkvm-verb-probe`, `jetkvm-device-readonly`,
+`jetkvm-input-probe`, `jetkvm-ocr-readonly`, `jetkvm-entity-probe`,
+`jetkvm-console-session`) live in the root `charly.yml`.
 
 ## Development
 
@@ -132,3 +143,25 @@ From the repo root, the candy is gated by the real charly:
 ```sh
 charly box validate
 ```
+
+## Layout
+
+- `candy/plugin-jetkvm/` — the plugin module: `plugin.go`, `provider.go`,
+  `catalog.go`, `methods.go`, `session.go`, `install.go`, `ocr.go`,
+  `credential.go`, `kind.go`, `schema/jetkvm.cue`, `params/cue_types_gen.go`,
+  `internal/kvmclient/`, `cmd/serve/main.go`.
+- `candy/plugin-jetkvm/charly.yml` — the `plugin-jetkvm:` candy entity.
+- `charly.yml` — the root project manifest (`discover: candy`) + the disposable
+  beds.
+- `.github/workflows/ci.yml` — the repo's Go gates (gofmt, golangci-lint, vet,
+  test).
+- `.github/workflows/tag-on-merge.yml` — CalVer tag + `CHANGELOG/` on merge.
+- `third_party/NOTICE` — the vendored client provenance.
+
+## Related
+
+- Owning skill: `/charly-check:jetkvm` — the `jetkvm:` verb reference (the candy
+  carries no `skill:` entity of its own; the gap is tracked in
+  [opencharly/opencharly#291](https://github.com/opencharly/opencharly/issues/291)).
+- `/charly-internals:plugin` — the plugin/provider model.
+- [`opencharly/charly`](https://github.com/opencharly/charly) — the charly CLI.
