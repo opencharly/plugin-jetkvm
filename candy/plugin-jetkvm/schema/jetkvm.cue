@@ -69,7 +69,7 @@
 	// button — pointer button (default left). Used by `click` and `drag`.
 	// `move`/`mouse` are pure position moves and NEVER press a button, so a
 	// `button:` on them is validated but not sent.
-	button?: "left" | "right" | "middle"
+	button?: or(_buttonWord)
 	// scroll_x / scroll_y — wheel deltas (scroll).
 	scroll_x?: int @go(ScrollX,type=int)
 	scroll_y?: int @go(ScrollY,type=int)
@@ -94,11 +94,11 @@
 	// media_file — the device-storage filename `virtual-media` mounts/deletes.
 	media_file?: string @go(MediaFile)
 	// media_mode — cdrom | disk.
-	media_mode?: "cdrom" | "disk" @go(MediaMode)
+	media_mode?: or(_mediaModeWord) @go(MediaMode)
 
 	// --- usb --------------------------------------------------------------
 	// usb_device — the virtual USB device class to enable/disable.
-	usb_device?: "absolute_mouse" | "relative_mouse" | "keyboard" | "mass_storage" | "serial_console" | "audio" @go(UsbDevice)
+	usb_device?: or(_usbDeviceWord) @go(UsbDevice)
 	// usb_enabled — enable/disable the addressed usb_device (or the whole
 	// emulation bus for `usb-emulation`).
 	usb_enabled?: bool @go(UsbEnabled)
@@ -238,7 +238,7 @@
 	//          change the persistent order; ideal for booting an installer medium
 	//          once, then returning to the disk).
 	//   set  — persist the order: `efibootmgr --bootorder <sequence>`.
-	boot_order_action?: "list" | "next" | "set" @go(BootOrderAction)
+	boot_order_action?: or(_bootOrderActionWord) @go(BootOrderAction)
 	// boot_order_entry — the entry number for action: next (e.g. "0003").
 	boot_order_entry?: string @go(BootOrderEntry)
 	// boot_order_sequence — the comma-separated entry order for action: set
@@ -283,6 +283,37 @@
 	artifact_contains_text?:  string                       @go(ArtifactContainsText)
 }
 
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, and its word list is
+// derived from the table and used as `or()` of that list (§10.1 S3, D-PAT-3).
+// The table and the enum it feeds therefore cannot disagree, and a new word is
+// ONE row here. `@vocab` names the owner (§3.1): this set is compiled into THIS
+// plugin, so the owner is the plugin's own word `jetkvm`.
+_button: {left: {}, right: {}, middle: {}} @vocab(jetkvm)
+_buttonWord: [for w, _ in _button {w}]
+
+_mediaMode: {cdrom: {}, disk: {}} @vocab(jetkvm)
+_mediaModeWord: [for w, _ in _mediaMode {w}]
+
+_usbDevice: {
+	absolute_mouse: {}
+	relative_mouse: {}
+	keyboard: {}
+	mass_storage: {}
+	serial_console: {}
+	audio: {}
+} @vocab(jetkvm)
+_usbDeviceWord: [for w, _ in _usbDevice {w}]
+
+_bootOrderAction: {list: {}, next: {}, set: {}} @vocab(jetkvm)
+_bootOrderActionWord: [for w, _ in _bootOrderAction {w}]
+
+// --- the installer-step actions (S3) ------------------------------------------
+// The vocabulary table: the ONE input action a recipe step may send once its
+// `wait_for` anchor is on screen. The word list below is derived from it.
+_installAction: {key: {}, type: {}, "key-combo": {}} @vocab(jetkvm)
+_installActionWord: [for w, _ in _installAction {w}]
+
 // #JetkvmInstallStep — ONE step of a console-installer recipe driven by the
 // `install` method. Each step OCR-waits for its `wait_for` anchor to appear on
 // the screen, then performs ONE input action.
@@ -299,7 +330,7 @@
 	wait_for: string & !="" @go(WaitFor)
 	// action — the input to send once `wait_for` is on screen. Omitted means the
 	// step only waits (a pure synchronisation/observation step).
-	action?: "key" | "type" | "key-combo"
+	action?: or(_installActionWord)
 	// key — the named key for action: key (Return, Escape, F5, ...).
 	key?: string @go(KeyName)
 	// combo — the chord for action: key-combo (ctrl+c, ctrl+alt+Delete, ...).
@@ -320,6 +351,36 @@
 	description?: string @go(Description)
 }
 
+// --- the action verbs (S3) ---------------------------------------------------
+// The vocabulary table: one row per action verb, grouped by the method that
+// takes it. The word list below is derived from it.
+_action: {
+	// ATX power (methodPower)
+	"power-short": {}
+	"power-long": {}
+	reset: {}
+	// DC power (methodDCPower)
+	on:             {}
+	off:            {}
+	"restore-on": {}
+	"restore-off": {}
+	"restore-last": {}
+	// virtual media (methodVirtualMedia)
+	"mount-url": {}
+	"mount-storage": {}
+	unmount:         {}
+	delete:          {}
+	// set-video (methodSetVideo)
+	codec: {}
+	quality: {}
+	sleep:   {}
+	paused:  {}
+	// set-display (methodSetDisplay)
+	rotation: {}
+	backlight: {}
+} @vocab(jetkvm)
+_actionWord: [for w, _ in _action {w}]
+
 // #JetkvmAction — the union of every action verb the action-bearing methods
 // accept. It is the CUE-expressible half of the action contract: the SET of legal
 // verbs is enforced here at validate time (a typo fails before any device call).
@@ -333,30 +394,7 @@
 // spec/schema/vm.cue's #LibvirtGraphics note). The method-SPECIFIC subset is
 // therefore enforced at dispatch, which is also where the error can name the
 // method. The union below keeps the generator healthy.
-#JetkvmAction: string &
-	// ATX power (methodPower)
-	"power-short" |
-	"power-long" |
-	"reset" |
-	// DC power (methodDCPower)
-	"on" |
-	"off" |
-	"restore-on" |
-	"restore-off" |
-	"restore-last" |
-	// virtual media (methodVirtualMedia)
-	"mount-url" |
-	"mount-storage" |
-	"unmount" |
-	"delete" |
-	// set-video (methodSetVideo)
-	"codec" |
-	"quality" |
-	"sleep" |
-	"paused" |
-	// set-display (methodSetDisplay)
-	"rotation" |
-	"backlight"
+#JetkvmAction: or(_actionWord)
 
 // #JetkvmSessionCommand — ONE command the `run-command` method runs in an OPEN
 // terminal session, reading its result by OCR.
@@ -472,101 +510,108 @@
 	answers_env?: {[string]: string} @go(AnswersEnv)
 }
 
-// #JetkvmMethod — the method catalog. Grouped by intent so the read-only
+// --- the method catalog (S3) -------------------------------------------------
+// The vocabulary table: one row per method, grouped by intent so the read-only
 // surface is separable from the mutating one (the allow_control gate).
-//
-// NOTE: written as a bare trailing-pipe disjunction, NOT `(...)`-wrapped: CUE
-// does not terminate a parenthesised expression at a newline, so the grouped
-// form requires commas and breaks `cue exp gengotypes`.
-#JetkvmMethod: string &
+_method: {
 	// observation (read-only)
-	"status" |
-	"screenshot" |
-	"ocr" |
-	"version" |
-	"diagnostics" |
-	"video-state" |
-	"usb-state" |
-	"atx-state" |
-	"dc-state" |
-	"virtual-media-state" |
-	"storage-files" |
-	"wol-devices" |
-	"macros" |
-	"keyboard-layout" |
-	"timezones" |
-	"cloud-state" |
-	"network-state" |
-	"network-settings" |
-	"tailscale-status" |
-	"update-status" |
-	"devmode-state" |
-	"ssh-key" |
-	"tls-state" |
-	"extensions" |
-	"public-ip" |
+	status: {}
+	screenshot: {}
+	ocr: {}
+	version: {}
+	diagnostics: {}
+	"video-state": {}
+	"usb-state": {}
+	"atx-state": {}
+	"dc-state": {}
+	"virtual-media-state": {}
+	"storage-files": {}
+	"wol-devices": {}
+	macros: {}
+	"keyboard-layout": {}
+	timezones: {}
+	"cloud-state": {}
+	"network-state": {}
+	"network-settings": {}
+	"tailscale-status": {}
+	"update-status": {}
+	"devmode-state": {}
+	"ssh-key": {}
+	"tls-state": {}
+	extensions: {}
+	"public-ip": {}
 	// input (mutating)
-	"key" |
-	"type" |
-	"key-combo" |
-	"macro" |
-	"click" |
-	"mouse" |
-	"move" |
-	"scroll" |
-	"drag" |
+	key: {}
+	type: {}
+	"key-combo": {}
+	macro: {}
+	click: {}
+	mouse: {}
+	move: {}
+	scroll: {}
+	drag: {}
 	// installer (mutating: it drives keyboard input over a recipe)
-	"install" |
+	install: {}
 	// console terminal session (mutating: opens a terminal and drives input)
-	"open-terminal" |
-	"run-command" |
-	"close-terminal" |
+	"open-terminal": {}
+	"run-command": {}
+	"close-terminal": {}
 	// LUKS/disk-encryption passphrase entry at the initramfs prompt (mutating)
-	"luks-unlock" |
+	"luks-unlock": {}
 	// console FLOW: continuous OCR-until-condition with named outcomes + control
 	// flow (if/then/else, case/switch, bounded while) (mutating)
-	"flow" |
+	flow: {}
 	// boot order: set the UEFI boot order from inside the running system via the
 	// EFI boot manager (efibootmgr) over the terminal (mutating)
-	"boot-order" |
+	"boot-order": {}
 	// power (mutating)
-	"power" |
-	"dc-power" |
-	"reboot" |
-	"wol" |
+	power: {}
+	"dc-power": {}
+	reboot: {}
+	wol: {}
 	// wake the controlled host via the USB HID wake report (upstream's
 	// wakeHost RPC) — the proper wake path when the host is display-asleep
 	// (DPMS) rather than powered off; `wol` is for the powered-off case.
-	"wake-host" |
+	"wake-host": {}
 	// media / usb (mutating)
-	"virtual-media" |
-	"check-media-url" |
-	"usb-device" |
-	"usb-emulation" |
-	"usb-config" |
+	"virtual-media": {}
+	"check-media-url": {}
+	"usb-device": {}
+	"usb-emulation": {}
+	"usb-config": {}
 	// device config (mutating)
-	"set-settings" |
-	"set-edid" |
-	"set-video" |
-	"set-display" |
-	"set-audio" |
-	"set-network" |
-	"set-tailscale" |
-	"set-devmode" |
-	"set-ssh-key" |
-	"set-tls" |
-	"set-keyboard-layout" |
-	"set-macros" |
-	"set-jiggler" |
-	"set-extension" |
-	"set-wol-devices" |
-	"set-log-level" |
-	"renew-dhcp" |
-	"factory-reset" |
+	"set-settings": {}
+	"set-edid": {}
+	"set-video": {}
+	"set-display": {}
+	"set-audio": {}
+	"set-network": {}
+	"set-tailscale": {}
+	"set-devmode": {}
+	"set-ssh-key": {}
+	"set-tls": {}
+	"set-keyboard-layout": {}
+	"set-macros": {}
+	"set-jiggler": {}
+	"set-extension": {}
+	"set-wol-devices": {}
+	"set-log-level": {}
+	"renew-dhcp": {}
+	"factory-reset": {}
 	// lifecycle (never autonomous — refused before dispatch)
-	"update" |
+	update: {}
 	// raw escape hatch (mutating: it can reach any device method)
-	"rpc"
+	rpc: {}
+} @vocab(jetkvm)
+_methodWord: [for w, _ in _method {w}]
+
+// #JetkvmMethod — the method catalog. Grouped by intent so the read-only
+// surface is separable from the mutating one (the allow_control gate).
+//
+// S3: the words are rows of the `_method` table above and the enum below is
+// derived from its word list, so the catalog has ONE home — a new method is one
+// row there, and the table, the derived list and this enum cannot disagree.
+#JetkvmMethod: or(_methodWord)
 
 // #JetkvmMacroStep — one step of a keyboard macro.
 #JetkvmMacroStep: {

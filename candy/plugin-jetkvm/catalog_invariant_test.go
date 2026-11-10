@@ -20,55 +20,18 @@ import (
 	"testing"
 )
 
-// jetkvmMethodBlock extracts the #JetkvmMethod disjunction from the schema.
+// schemaMethods returns the sorted method names the SERVED #JetkvmMethod enum
+// accepts.
 //
-// It deliberately does NOT terminate on a blank line: the enum is grouped by
-// comment headings and may legitimately gain blank lines between groups, and a
-// `\n\n` terminator would silently truncate the parse at the first one —
-// exempting the whole tail of the catalog while the test still passed. The block
-// runs instead to the FIRST top-level (column-0) declaration that follows it,
-// which is the next `#Def:` or the end of file.
-func jetkvmMethodBlock(t *testing.T) string {
-	t.Helper()
-	b, err := os.ReadFile("schema/jetkvm.cue")
-	if err != nil {
-		t.Fatalf("read schema: %v", err)
-	}
-	src := string(b)
-	start := strings.Index(src, "#JetkvmMethod:")
-	if start < 0 {
-		t.Fatal("could not locate #JetkvmMethod in schema/jetkvm.cue")
-	}
-	rest := src[start:]
-	// Advance past the definition's own opening line, then stop at the next
-	// column-0 declaration (a line starting with `#` or a bare identifier
-	// followed by `:`).
-	lines := strings.Split(rest, "\n")
-	var block []string
-	for i, line := range lines {
-		if i == 0 {
-			block = append(block, line)
-			continue
-		}
-		if line != "" && !strings.HasPrefix(line, "\t") && !strings.HasPrefix(line, " ") {
-			break // the next top-level declaration
-		}
-		block = append(block, line)
-	}
-	return strings.Join(block, "\n")
-}
-
-// schemaMethods returns the sorted method names in #JetkvmMethod.
+// It reads the schema through the CUE API (servedSchema, schema_served_test.go)
+// instead of parsing its text, so the enum's shape — §10.1 S3: a vocabulary
+// table plus a derived word list — can change without silently truncating the
+// read. The old text parse stopped at the next column-0 declaration; a derived
+// enum has no such body, so the parse would have found ZERO methods and left
+// every invariant below passing vacuously.
 func schemaMethods(t *testing.T) []string {
 	t.Helper()
-	block := jetkvmMethodBlock(t)
-	names := regexp.MustCompile(`"([a-z][a-z0-9-]*)"`).FindAllStringSubmatch(block, -1)
-	out := make([]string, 0, len(names))
-	for _, m := range names {
-		out = append(out, m[1])
-	}
-	sort.Strings(out)
-	return out
+	return schemaWordList(t, servedSchema(t), "#JetkvmMethod")
 }
 
 // dispatchedMethods returns the sorted method names runMethod routes. Cases may
@@ -100,11 +63,11 @@ func dispatchedMethods(t *testing.T) []string {
 	return out
 }
 
-// TestSchemaMethodParseCoversTheWholeEnum guards the PARSER itself: the enum's
-// last entry must be parsed, so a future blank line or terminator change cannot
-// silently truncate schemaMethods and exempt the catalog's tail. `rpc` is the
-// final method in the disjunction, and `status` the first.
-func TestSchemaMethodParseCoversTheWholeEnum(t *testing.T) {
+// TestServedCatalogCoversTheWholeEnum guards the READER and the served catalog in
+// one step: the enum's first and last entries must be present, so neither a
+// truncated read nor a table whose tail never reaches the enum can exempt the
+// catalog. `status` is the first method and `rpc` the last.
+func TestServedCatalogCoversTheWholeEnum(t *testing.T) {
 	got := schemaMethods(t)
 	has := func(name string) bool {
 		for _, m := range got {
@@ -115,13 +78,13 @@ func TestSchemaMethodParseCoversTheWholeEnum(t *testing.T) {
 		return false
 	}
 	if !has("status") {
-		t.Errorf("parser missed the enum HEAD (status) — got %d methods: %v", len(got), got)
+		t.Errorf("served enum is missing its HEAD (status) — got %d methods: %v", len(got), got)
 	}
 	if !has("rpc") {
-		t.Errorf("parser missed the enum TAIL (rpc) — the parse is truncating; got %d methods: %v", len(got), got)
+		t.Errorf("served enum is missing its TAIL (rpc) — the derivation is losing rows; got %d methods: %v", len(got), got)
 	}
 	if len(got) < 60 {
-		t.Errorf("parsed only %d methods — the #JetkvmMethod parse looks truncated", len(got))
+		t.Errorf("read only %d methods — the served #JetkvmMethod derivation looks truncated", len(got))
 	}
 }
 
@@ -209,11 +172,11 @@ func TestActionEnumCoversEveryActionBearingMethod(t *testing.T) {
 		t.Fatalf("read catalog: %v", err)
 	}
 	code := string(src)
-	// The enum verbs.
-	enumBlock := regexp.MustCompile(`(?s)#JetkvmAction: string &(.*?)\n\n`).FindString(readSchema(t))
+	// The enum verbs, read from the served #JetkvmAction exactly as the host
+	// reads them when it validates an authored `action:`.
 	enum := map[string]bool{}
-	for _, m := range regexp.MustCompile(`"([a-z-]+)"`).FindAllStringSubmatch(enumBlock, -1) {
-		enum[m[1]] = true
+	for _, w := range schemaWordList(t, servedSchema(t), "#JetkvmAction") {
+		enum[w] = true
 	}
 	// The verbs each action-bearing method accepts, from its `case "a", "b":` arms.
 	methods := []string{"methodPower", "methodDCPower", "methodVirtualMedia", "methodSetVideo", "methodSetDisplay"}
@@ -240,13 +203,4 @@ func TestActionEnumCoversEveryActionBearingMethod(t *testing.T) {
 			t.Errorf("#JetkvmAction is missing %q, which an action-bearing method accepts — the enum narrowing would reject a valid value", v)
 		}
 	}
-}
-
-func readSchema(t *testing.T) string {
-	t.Helper()
-	b, err := os.ReadFile("schema/jetkvm.cue")
-	if err != nil {
-		t.Fatalf("read schema: %v", err)
-	}
-	return string(b)
 }
